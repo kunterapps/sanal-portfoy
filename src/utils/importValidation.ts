@@ -1,6 +1,7 @@
-import { AssetCategory, Currency, GoldType, PortfolioAsset, PortfolioSnapshot } from '../types/portfolio';
+import { AssetCategory, AssetTransaction, Currency, GoldType, PortfolioAsset, PortfolioSnapshot } from '../types/portfolio';
 import { TURKISH_GOLD_DEFINITIONS } from './goldCalculations';
 import { sanitizeSnapshots } from './snapshots';
+import { applyTransactions, ensureTransactions, TransactionError } from './transactions';
 
 const CATEGORIES: AssetCategory[] = ['FOREIGN_STOCK', 'BIST', 'TEFAS', 'BEFAS', 'COMMODITY', 'CASH', 'CRYPTO'];
 const CURRENCIES: Currency[] = ['TRY', 'USD', 'EUR', 'GBP'];
@@ -13,6 +14,30 @@ export interface ImportResult {
 
 function isFiniteNonNegative(v: unknown): v is number {
   return typeof v === 'number' && Number.isFinite(v) && v >= 0;
+}
+
+function parseTransactions(value: unknown): AssetTransaction[] | null {
+  if (!Array.isArray(value)) return null;
+  const result: AssetTransaction[] = [];
+  for (const [i, raw] of value.entries()) {
+    if (!raw || typeof raw !== 'object') return null;
+    const t = raw as Record<string, unknown>;
+    if (t.type !== 'BUY' && t.type !== 'SELL') return null;
+    if (typeof t.date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(t.date)) return null;
+    if (!isFiniteNonNegative(t.quantity) || t.quantity === 0 || !isFiniteNonNegative(t.price)) return null;
+    if (t.fee !== undefined && !isFiniteNonNegative(t.fee)) return null;
+    result.push({
+      id: typeof t.id === 'string' && t.id ? t.id : `tx_import_${i}_${Math.random().toString(36).slice(2, 8)}`,
+      type: t.type,
+      date: t.date,
+      quantity: t.quantity,
+      price: t.price,
+      ...(typeof t.fee === 'number' && t.fee > 0 && { fee: t.fee }),
+      ...(typeof t.notes === 'string' && t.notes && { notes: t.notes }),
+      createdAt: typeof t.createdAt === 'number' && Number.isFinite(t.createdAt) ? t.createdAt : i,
+    });
+  }
+  return result;
 }
 
 /**
@@ -69,7 +94,7 @@ export function parsePortfolioBackup(parsed: unknown): ImportResult {
     }
     seenIds.add(id);
 
-    assets.push({
+    const base: PortfolioAsset = {
       id,
       category: r.category as AssetCategory,
       symbol: r.symbol.trim(),
@@ -84,7 +109,24 @@ export function parsePortfolioBackup(parsed: unknown): ImportResult {
       ...(typeof r.notes === 'string' && { notes: r.notes }),
       ...(typeof r.purchaseDate === 'string' && { purchaseDate: r.purchaseDate }),
       ...(r.priceStale === true && { priceStale: true }),
-    });
+    };
+
+    if (r.transactions !== undefined && (!Array.isArray(r.transactions) || r.transactions.length > 0)) {
+      const transactions = parseTransactions(r.transactions);
+      if (!transactions) {
+        errors.push(`${label} (${r.symbol}): işlem geçmişi geçersiz`);
+        return;
+      }
+      try {
+        assets.push(applyTransactions(base, transactions));
+      } catch (e) {
+        if (!(e instanceof TransactionError)) throw e;
+        errors.push(`${label} (${r.symbol}): ${e.message}`);
+      }
+      return;
+    }
+
+    assets.push(ensureTransactions(base));
   });
 
   const snapshots =

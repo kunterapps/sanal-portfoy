@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { 
   PortfolioAsset, 
+  AssetTransaction,
   ExchangeRates, 
   Currency, 
   TimeRange,
@@ -34,6 +35,8 @@ import {
 } from './utils/snapshots';
 import { triggerDownloadStandaloneHtml } from './utils/standaloneHtmlGenerator';
 import { getCashUnitPrice } from './utils/currency';
+import { applyTransactions, ensureTransactions, TransactionError } from './utils/transactions';
+import { TransactionModal } from './components/TransactionModal';
 
 const STORAGE_KEY = 'my_personal_portfolio_assets';
 const RATES_STORAGE_KEY = 'my_personal_portfolio_rates';
@@ -46,7 +49,8 @@ export default function App() {
       const stored = localStorage.getItem(STORAGE_KEY);
       if (stored) {
         const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed)) return parsed;
+        // Older data has no transaction history; give each asset an opening BUY
+        if (Array.isArray(parsed)) return parsed.map(ensureTransactions);
       }
     } catch (e) {
       console.error('Failed to load portfolio from localStorage', e);
@@ -88,6 +92,8 @@ export default function App() {
   const [isAssetModalOpen, setIsAssetModalOpen] = useState(false);
   const [editingAsset, setEditingAsset] = useState<PortfolioAsset | null>(null);
   const [quickPriceAsset, setQuickPriceAsset] = useState<PortfolioAsset | null>(null);
+  const [transactionAssetId, setTransactionAssetId] = useState<string | null>(null);
+  const transactionAsset = assets.find((a) => a.id === transactionAssetId) ?? null;
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
 
   // Toast Helper
@@ -180,14 +186,27 @@ export default function App() {
   const handleSaveAsset = (assetData: Omit<PortfolioAsset, 'id'>, existingId?: string) => {
     if (existingId) {
       setAssets((prev) =>
-        prev.map((a) => (a.id === existingId ? { ...assetData, id: existingId } : a))
+        prev.map((a) => {
+          if (a.id !== existingId) return a;
+          const updated: PortfolioAsset = { ...a, ...assetData, id: existingId, priceStale: false };
+          const txs = a.transactions ?? [];
+          if (txs.length > 1) {
+            // Quantity and cost are managed by transactions; keep them authoritative
+            return applyTransactions(updated, txs);
+          }
+          // Only the opening entry: editing quantity/cost rewrites it (keeping its date)
+          const opening = txs[0] ?? ensureTransactions({ ...updated, transactions: [] }).transactions![0];
+          return applyTransactions(updated, [
+            { ...opening, type: 'BUY', quantity: assetData.quantity, price: assetData.costPrice },
+          ]);
+        })
       );
       showToast(`${assetData.symbol} başarıyla güncellendi.`);
     } else {
-      const newAsset: PortfolioAsset = {
+      const newAsset: PortfolioAsset = ensureTransactions({
         ...assetData,
-        id: `asset_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
-      };
+        id: `asset_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      });
       setAssets((prev) => [newAsset, ...prev]);
       showToast(`${assetData.symbol} portföye eklendi.`);
     }
@@ -204,6 +223,37 @@ export default function App() {
       showToast(`${asset.symbol} portföyden kaldırıldı.`);
     }
   };
+
+  // Buy / sell transactions. Returns an error message instead of saving if
+  // the history would become invalid (e.g. selling more than held).
+  const updateTransactions = (
+    assetId: string,
+    change: (txs: AssetTransaction[]) => AssetTransaction[],
+    successMessage: string
+  ): string | null => {
+    const asset = assets.find((a) => a.id === assetId);
+    if (!asset) return 'Varlık bulunamadı.';
+    let updated: PortfolioAsset;
+    try {
+      updated = applyTransactions(asset, change(asset.transactions ?? []));
+    } catch (err) {
+      if (err instanceof TransactionError) return err.message;
+      throw err;
+    }
+    setAssets((prev) => prev.map((a) => (a.id === assetId ? updated : a)));
+    showToast(successMessage);
+    return null;
+  };
+
+  const handleAddTransaction = (assetId: string, tx: AssetTransaction) =>
+    updateTransactions(
+      assetId,
+      (txs) => [...txs, tx],
+      tx.type === 'BUY' ? 'Alış işlemi eklendi.' : 'Satış işlemi eklendi.'
+    );
+
+  const handleDeleteTransaction = (assetId: string, txId: string) =>
+    updateTransactions(assetId, (txs) => txs.filter((t) => t.id !== txId), 'İşlem silindi.');
 
   // Quick Price Override
   const handleSaveQuickPrice = (assetId: string, newPrice: number) => {
@@ -228,7 +278,7 @@ export default function App() {
         };
       }
       return asset;
-    });
+    }).map(ensureTransactions);
     setAssets(synced);
     // Demo values shouldn't mix into a real value history
     setSnapshots([]);
@@ -345,6 +395,7 @@ export default function App() {
                 setIsAssetModalOpen(true);
               }}
               onQuickPriceEdit={(asset) => setQuickPriceAsset(asset)}
+              onOpenTransactions={(asset) => setTransactionAssetId(asset.id)}
               onDeleteAsset={handleDeleteAsset}
             />
           </>
@@ -389,6 +440,14 @@ export default function App() {
         onSave={handleSaveAsset}
         editingAsset={editingAsset}
         rates={rates}
+      />
+
+      <TransactionModal
+        asset={transactionAsset}
+        rates={rates}
+        onClose={() => setTransactionAssetId(null)}
+        onAddTransaction={handleAddTransaction}
+        onDeleteTransaction={handleDeleteTransaction}
       />
 
       <QuickPriceModal

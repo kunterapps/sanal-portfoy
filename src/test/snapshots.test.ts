@@ -84,3 +84,13 @@ describe('sanitizeSnapshots', () => {
     expect(sanitizeSnapshots('nope')).toEqual([]);
   });
 });
+
+describe('calculateDailyChange with sales', () => {
+  it('does not count selling at the current price as a loss', () => {
+    // Yesterday: 10 units worth 150 each, cost 100 → profit 500 unrealized
+    const yesterday = { ...snap('2026-10-23', 1500, 1000), realizedProfitTRY: 0, realizedProfitUSD: 0 };
+    // Today: sold 5 at 150 → 250 realized, remaining 5 units worth 750, cost 500
+    const change = calculateDailyChange([yesterday], { ...totals(750, 500), realizedProfitTRY: 250, realizedProfitUSD: 6.25 }, NOW);
+    expect(change?.changeTRY).toBe(0);
+  });
+});

@@ -19,13 +19,27 @@ export type GoldType =
   | 'ONS_GOLD' 
   | 'GUMUS_GRAM';
 
+export type TransactionType = 'BUY' | 'SELL';
+
+/** A buy or sell. Prices and fees are in the asset's costCurrency. */
+export interface AssetTransaction {
+  id: string;
+  type: TransactionType;
+  date: string;            // YYYY-MM-DD
+  quantity: number;
+  price: number;           // Per unit
+  fee?: number;            // Total commission for this transaction
+  notes?: string;
+  createdAt: number;       // Tie-breaker for same-day ordering
+}
+
 export interface PortfolioAsset {
   id: string;
   category: AssetCategory;
   symbol: string;
   name: string;
-  quantity: number;
-  costPrice: number;       // Per unit in costCurrency
+  quantity: number;        // Derived from transactions when present
+  costPrice: number;       // Per unit in costCurrency (weighted average when derived from transactions)
   costCurrency: Currency;
   currentPrice: number;    // Per unit in currentCurrency
   currentCurrency: Currency;
@@ -35,6 +49,9 @@ export interface PortfolioAsset {
   purchaseDate?: string;
   /** True when the last live refresh couldn't fetch a price for this asset */
   priceStale?: boolean;
+  transactions?: AssetTransaction[];
+  /** Realized P/L from sales in costCurrency, derived from transactions */
+  realizedProfit?: number;
 }
 
 export interface ExchangeRates {
@@ -64,6 +81,9 @@ export interface PortfolioSnapshot {
   totalValueUSD: number;
   totalCostTRY: number;
   totalCostUSD: number;
+  /** Cumulative realized P/L at snapshot time (absent in older snapshots) */
+  realizedProfitTRY?: number;
+  realizedProfitUSD?: number;
 }
 
 export interface CategorySummary {

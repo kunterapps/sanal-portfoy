@@ -105,6 +105,9 @@ export function calculatePortfolioTotals(assets: PortfolioAsset[], rates: Exchan
   let totalCostTRY = 0;
   let totalValueUSD = 0;
   let totalCostUSD = 0;
+  let realizedProfitTRY = 0;
+  let realizedProfitUSD = 0;
+  let openCount = 0;
 
   assets.forEach((asset) => {
     const pl = getAssetProfitLoss(asset, rates);
@@ -112,6 +115,10 @@ export function calculatePortfolioTotals(assets: PortfolioAsset[], rates: Exchan
     totalCostTRY += pl.costTRY;
     totalValueUSD += pl.valueUSD;
     totalCostUSD += pl.costUSD;
+    // Realized P/L is kept in costCurrency; converted at today's rates
+    realizedProfitTRY += convertToTRY(asset.realizedProfit || 0, asset.costCurrency, rates);
+    realizedProfitUSD += convertToUSD(asset.realizedProfit || 0, asset.costCurrency, rates);
+    if (asset.quantity > 0) openCount++;
   });
 
   const totalProfitTRY = totalValueTRY - totalCostTRY;
@@ -126,7 +133,9 @@ export function calculatePortfolioTotals(assets: PortfolioAsset[], rates: Exchan
     totalProfitTRY,
     totalProfitUSD,
     totalProfitPercent,
-    assetCount: assets.length,
+    realizedProfitTRY,
+    realizedProfitUSD,
+    assetCount: openCount,
   };
 }
 

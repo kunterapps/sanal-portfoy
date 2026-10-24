@@ -13,6 +13,8 @@ interface ExecutiveSummaryProps {
     totalProfitTRY: number;
     totalProfitUSD: number;
     totalProfitPercent: number;
+    realizedProfitTRY: number;
+    realizedProfitUSD: number;
     assetCount: number;
   };
   dailyChange: DailyChange | null;
@@ -40,6 +42,7 @@ export const ExecutiveSummary: React.FC<ExecutiveSummaryProps> = ({
   const secondaryCurrency: Currency = baseCurrency === 'TRY' ? 'USD' : 'TRY';
 
   const displayProfit = baseCurrency === 'TRY' ? totals.totalProfitTRY : totals.totalProfitUSD;
+  const displayRealized = baseCurrency === 'TRY' ? totals.realizedProfitTRY : totals.realizedProfitUSD;
   const displayDaily = dailyChange
     ? baseCurrency === 'TRY'
       ? dailyChange.changeTRY
@@ -106,7 +109,7 @@ export const ExecutiveSummary: React.FC<ExecutiveSummaryProps> = ({
       <div className="bg-[#0f172a] border border-slate-800 rounded-2xl p-5 flex flex-col justify-between">
         <div>
           <div className="flex items-center justify-between text-xs text-slate-400 font-medium mb-2.5">
-            <span>Toplam Net Kâr / Zarar</span>
+            <span>Açık Pozisyon Kâr / Zarar</span>
             <span className={`inline-flex items-center gap-1 text-[11px] font-semibold font-mono ${
               isProfit ? 'text-emerald-400' : 'text-rose-400'
             }`}>
@@ -122,11 +125,19 @@ export const ExecutiveSummary: React.FC<ExecutiveSummaryProps> = ({
           </div>
         </div>
 
-        <div className="text-xs text-slate-500 font-mono mt-3 pt-2.5 border-t border-slate-800/80 flex items-center justify-between">
-          <span>Toplam Yatırılan Maliyet:</span>
-          <span className="text-slate-300 font-medium tabular-nums">
-            {formatCurrency(baseCurrency === 'TRY' ? totals.totalCostTRY : totals.totalCostUSD, baseCurrency, 2)}
-          </span>
+        <div className="text-xs text-slate-500 font-mono mt-3 pt-2.5 border-t border-slate-800/80 space-y-1">
+          <div className="flex items-center justify-between">
+            <span>Toplam Yatırılan Maliyet:</span>
+            <span className="text-slate-300 font-medium tabular-nums">
+              {formatCurrency(baseCurrency === 'TRY' ? totals.totalCostTRY : totals.totalCostUSD, baseCurrency, 2)}
+            </span>
+          </div>
+          <div className="flex items-center justify-between" title="Satışlardan gerçekleşen kâr/zarar (bugünkü kurla)">
+            <span>Gerçekleşmiş K/Z:</span>
+            <span className={`font-medium tabular-nums ${displayRealized >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+              {displayRealized >= 0 ? '+' : '-'}{formatCurrency(Math.abs(displayRealized), baseCurrency, 2)}
+            </span>
+          </div>
         </div>
       </div>
 

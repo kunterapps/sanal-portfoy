@@ -87,6 +87,9 @@ export const AssetModal: React.FC<AssetModalProps> = ({
   const [goldType, setGoldType] = useState<GoldType>('CEYREK');
   const [notes, setNotes] = useState('');
 
+  // With buy/sell history, quantity and average cost come from the transactions
+  const managedByTransactions = (editingAsset?.transactions?.length ?? 0) > 1;
+
   useEffect(() => {
     if (editingAsset) {
       setCategory(editingAsset.category);
@@ -179,7 +182,7 @@ export const AssetModal: React.FC<AssetModalProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!symbol.trim() || quantity <= 0) return;
+    if (!symbol.trim() || (quantity <= 0 && !managedByTransactions)) return;
 
     onSave(
       {
@@ -322,7 +325,13 @@ export const AssetModal: React.FC<AssetModalProps> = ({
           </div>
 
           {/* Quantity & Unit Cost */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          {managedByTransactions && (
+            <p className="text-[11px] text-amber-300 bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-2">
+              Bu varlığın alış/satış geçmişi var. Miktar ve ortalama maliyet işlemlerden hesaplanır; değiştirmek için
+              tablodaki ⇄ (Alış / Satış İşlemleri) butonunu kullanın.
+            </p>
+          )}
+          <fieldset disabled={managedByTransactions} className="grid grid-cols-1 sm:grid-cols-3 gap-3 disabled:opacity-50">
             <div>
               <label className="block text-slate-300 font-medium mb-1">
                 {category === 'COMMODITY' && !TURKISH_GOLD_DEFINITIONS[goldType]?.isUnitPiece
@@ -343,7 +352,7 @@ export const AssetModal: React.FC<AssetModalProps> = ({
 
             <div>
               <label className="block text-slate-300 font-medium mb-1">
-                Birim Alış Maliyeti <span className="text-rose-400">*</span>
+                {managedByTransactions ? 'Ortalama Maliyet' : 'Birim Alış Maliyeti'} <span className="text-rose-400">*</span>
               </label>
               <input
                 type="number"
@@ -371,7 +380,7 @@ export const AssetModal: React.FC<AssetModalProps> = ({
                 <option value="GBP">GBP (£)</option>
               </select>
             </div>
-          </div>
+          </fieldset>
 
           {/* Current Price & Currency */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

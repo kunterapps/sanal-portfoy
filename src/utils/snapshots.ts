@@ -7,6 +7,8 @@ export interface SnapshotTotals {
   totalValueUSD: number;
   totalCostTRY: number;
   totalCostUSD: number;
+  realizedProfitTRY?: number;
+  realizedProfitUSD?: number;
 }
 
 export interface DailyChange {
@@ -59,14 +61,27 @@ export function upsertTodaySnapshot(
     totalValueUSD: totals.totalValueUSD,
     totalCostTRY: totals.totalCostTRY,
     totalCostUSD: totals.totalCostUSD,
+    realizedProfitTRY: totals.realizedProfitTRY ?? 0,
+    realizedProfitUSD: totals.realizedProfitUSD ?? 0,
   };
   const others = snapshots.filter((s) => s.date !== today);
   return [...others, snapshot].sort((a, b) => a.date.localeCompare(b.date)).slice(-MAX_SNAPSHOTS);
 }
 
+/** Unrealized + realized profit; selling moves profit between the two without changing the sum. */
+function totalProfit(
+  s: Pick<SnapshotTotals, 'totalValueTRY' | 'totalCostTRY' | 'totalValueUSD' | 'totalCostUSD' | 'realizedProfitTRY' | 'realizedProfitUSD'>
+) {
+  return {
+    TRY: s.totalValueTRY - s.totalCostTRY + (s.realizedProfitTRY ?? 0),
+    USD: s.totalValueUSD - s.totalCostUSD + (s.realizedProfitUSD ?? 0),
+  };
+}
+
 /**
- * Change since the most recent earlier day. Measured on profit (value − cost),
- * so adding or removing assets doesn't show up as a market gain or loss.
+ * Change since the most recent earlier day. Measured on total profit
+ * (value − cost + realized), so buying, selling, adding or removing assets
+ * doesn't show up as a market gain or loss.
  * Returns null until there is a snapshot from a previous day.
  */
 export function calculateDailyChange(
@@ -78,10 +93,10 @@ export function calculateDailyChange(
   const previous = [...snapshots].reverse().find((s) => s.date < today);
   if (!previous) return null;
 
-  const changeTRY =
-    totals.totalValueTRY - totals.totalCostTRY - (previous.totalValueTRY - previous.totalCostTRY);
-  const changeUSD =
-    totals.totalValueUSD - totals.totalCostUSD - (previous.totalValueUSD - previous.totalCostUSD);
+  const current = totalProfit(totals);
+  const prev = totalProfit(previous);
+  const changeTRY = current.TRY - prev.TRY;
+  const changeUSD = current.USD - prev.USD;
   const percent = previous.totalValueTRY > 0 ? (changeTRY / previous.totalValueTRY) * 100 : 0;
 
   return { changeTRY, changeUSD, percent, sinceDate: previous.date };
@@ -144,6 +159,16 @@ export function sanitizeSnapshots(value: unknown): PortfolioSnapshot[] {
         isNum(s.totalCostTRY) &&
         isNum(s.totalCostUSD)
     )
+    .map((s) => ({
+      date: s.date,
+      timestamp: s.timestamp,
+      totalValueTRY: s.totalValueTRY,
+      totalValueUSD: s.totalValueUSD,
+      totalCostTRY: s.totalCostTRY,
+      totalCostUSD: s.totalCostUSD,
+      ...(isNum(s.realizedProfitTRY) && { realizedProfitTRY: s.realizedProfitTRY }),
+      ...(isNum(s.realizedProfitUSD) && { realizedProfitUSD: s.realizedProfitUSD }),
+    }))
     .sort((a, b) => a.date.localeCompare(b.date))
     .slice(-MAX_SNAPSHOTS);
 }

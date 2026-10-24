@@ -40,3 +40,34 @@ describe('parsePortfolioBackup', () => {
     expect(r.assets[0]).not.toHaveProperty('evil');
   });
 });
+
+describe('parsePortfolioBackup transactions', () => {
+  it('migrates assets without transactions to an opening buy', () => {
+    const r = parsePortfolioBackup([makeAsset({ quantity: 3, costPrice: 7 })]);
+    expect(r.assets[0].transactions).toHaveLength(1);
+    expect(r.assets[0].quantity).toBe(3);
+  });
+
+  it('recomputes quantity and cost from imported transactions', () => {
+    const r = parsePortfolioBackup([
+      {
+        ...makeAsset({ quantity: 999, costPrice: 999 }),
+        transactions: [
+          { id: 'a', type: 'BUY', date: '2026-01-01', quantity: 10, price: 100, createdAt: 1 },
+          { id: 'b', type: 'SELL', date: '2026-01-02', quantity: 4, price: 120, createdAt: 2 },
+        ],
+      },
+    ]);
+    expect(r.errors).toEqual([]);
+    expect(r.assets[0]).toMatchObject({ quantity: 6, costPrice: 100, realizedProfit: 80 });
+  });
+
+  it('rejects invalid transaction histories', () => {
+    const r = parsePortfolioBackup([
+      { ...makeAsset(), transactions: [{ type: 'BUY', date: 'yesterday', quantity: 1, price: 1 }] },
+      { ...makeAsset(), transactions: [{ type: 'SELL', date: '2026-01-01', quantity: 1, price: 1 }] },
+    ]);
+    expect(r.assets).toHaveLength(0);
+    expect(r.errors).toHaveLength(2);
+  });
+});
