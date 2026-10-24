@@ -137,9 +137,9 @@ export const AssetTable: React.FC<AssetTableProps> = ({
   return (
     <section className="bg-[#0f172a] border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
       {/* Table Toolbar & Category Filter Tabs */}
-      <div className="p-4 sm:p-5 border-b border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="p-4 sm:p-5 border-b border-slate-800 flex flex-col-reverse lg:flex-row lg:items-start justify-between gap-3">
         {/* Tabs */}
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 md:pb-0 scrollbar-none">
+        <div className="flex flex-wrap items-center gap-2">
           {tabs.map((tab) => {
             const count = tab.key === 'ALL'
               ? assets.length
@@ -152,14 +152,14 @@ export const AssetTable: React.FC<AssetTableProps> = ({
                 key={tab.key}
                 type="button"
                 onClick={() => setActiveTab(tab.key)}
-                className={`px-3 py-1.5 text-xs font-semibold rounded-lg whitespace-nowrap transition-colors flex items-center gap-1.5 ${
+                className={`h-9 px-3 text-sm font-medium rounded-lg whitespace-nowrap transition-colors flex items-center gap-2 border ${
                   activeTab === tab.key
-                    ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-600/30'
-                    : 'text-slate-400 hover:text-slate-200 bg-slate-900/60 border border-slate-800/80 hover:bg-slate-800/60'
+                    ? 'bg-indigo-600 border-indigo-600 text-white shadow-sm shadow-indigo-600/30'
+                    : 'text-slate-300 hover:text-white bg-slate-900/60 border-slate-800 hover:bg-slate-800/60'
                 }`}
               >
                 <span>{tab.label}</span>
-                <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
+                <span className={`min-w-5 text-center text-xs leading-5 px-1.5 rounded-full tabular-nums ${
                   activeTab === tab.key ? 'bg-indigo-700/80 text-white' : 'bg-slate-800 text-slate-400'
                 }`}>
                   {count}
@@ -170,26 +170,26 @@ export const AssetTable: React.FC<AssetTableProps> = ({
         </div>
 
         {/* Search Input */}
-        <div className="relative shrink-0 w-full md:w-64">
-          <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
+        <div className="relative shrink-0 w-full lg:w-64">
+          <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Sembol veya varlık ara..."
-            className="w-full bg-slate-900 border border-slate-800 text-xs text-slate-200 pl-8 pr-3 py-2 rounded-xl focus:outline-none focus:border-indigo-500 transition-colors"
+            className="w-full h-9 bg-slate-900 border border-slate-800 text-sm text-slate-200 placeholder:text-slate-500 pl-9 pr-3 rounded-lg focus:outline-none focus:border-indigo-500 transition-colors"
           />
         </div>
       </div>
 
       {/* Responsive Table */}
       <div className="overflow-x-auto">
-        <table className="w-full text-left text-xs">
-          <thead className="bg-slate-900/80 text-slate-400 uppercase text-[11px] font-semibold tracking-wider border-b border-slate-800">
+        <table className="w-full text-left text-sm">
+          <thead className="bg-slate-900/80 text-slate-400 text-xs font-semibold whitespace-nowrap border-b border-slate-800">
             <tr>
               <th
                 onClick={() => handleSort('symbol')}
-                className="py-3.5 px-4 cursor-pointer hover:text-white transition-colors select-none"
+                className="py-3 px-4 cursor-pointer hover:text-white transition-colors select-none"
               >
                 <div className="flex items-center gap-1">
                   <span>Varlık / Sembol</span>
@@ -199,21 +199,21 @@ export const AssetTable: React.FC<AssetTableProps> = ({
 
               <th
                 onClick={() => handleSort('quantity')}
-                className="py-3.5 px-4 text-right cursor-pointer hover:text-white transition-colors select-none"
+                className="py-3 px-4 text-right cursor-pointer hover:text-white transition-colors select-none"
               >
                 <div className="flex items-center justify-end gap-1">
-                  <span>Adet / Gramaj</span>
+                  <span>Miktar</span>
                   <ArrowUpDown className="w-3 h-3 text-slate-500" />
                 </div>
               </th>
 
-              <th className="py-3.5 px-4 text-right">
-                <span>Ortalama Maliyet</span>
+              <th className="py-3 px-4 text-right">
+                <span>Ort. Maliyet</span>
               </th>
 
               <th
                 onClick={() => handleSort('price')}
-                className="py-3.5 px-4 text-right cursor-pointer hover:text-white transition-colors select-none"
+                className="py-3 px-4 text-right cursor-pointer hover:text-white transition-colors select-none"
               >
                 <div className="flex items-center justify-end gap-1">
                   <span>Anlık Fiyat</span>
@@ -223,35 +223,35 @@ export const AssetTable: React.FC<AssetTableProps> = ({
 
               <th
                 onClick={() => handleSort('value')}
-                className="py-3.5 px-4 text-right cursor-pointer hover:text-white transition-colors select-none"
+                className="py-3 px-4 text-right cursor-pointer hover:text-white transition-colors select-none"
               >
                 <div className="flex items-center justify-end gap-1">
-                  <span>Toplam Değer ({baseCurrency})</span>
+                  <span>Değer ({baseCurrency})</span>
                   <ArrowUpDown className="w-3 h-3 text-slate-500" />
                 </div>
               </th>
 
               <th
                 onClick={() => handleSort('share')}
-                className="py-3.5 px-4 text-right cursor-pointer hover:text-white transition-colors select-none"
+                className="py-3 px-4 text-right cursor-pointer hover:text-white transition-colors select-none"
               >
                 <div className="flex items-center justify-end gap-1">
-                  <span>Portföy Payı (%)</span>
+                  <span>Pay</span>
                   <ArrowUpDown className="w-3 h-3 text-slate-500" />
                 </div>
               </th>
 
               <th
                 onClick={() => handleSort('profit')}
-                className="py-3.5 px-4 text-right cursor-pointer hover:text-white transition-colors select-none"
+                className="py-3 px-4 text-right cursor-pointer hover:text-white transition-colors select-none"
               >
                 <div className="flex items-center justify-end gap-1">
-                  <span>Kâr / Zarar (%)</span>
+                  <span>Kâr / Zarar</span>
                   <ArrowUpDown className="w-3 h-3 text-slate-500" />
                 </div>
               </th>
 
-              <th className="py-3.5 px-4 text-center">İşlemler</th>
+              <th className="py-3 px-4 text-center">İşlemler</th>
             </tr>
           </thead>
 
@@ -274,7 +274,7 @@ export const AssetTable: React.FC<AssetTableProps> = ({
                     className={`hover:bg-slate-850/50 transition-colors group ${isClosedPosition(asset) ? 'opacity-60' : ''}`}
                   >
                     {/* Symbol & Name */}
-                    <td className="py-3.5 px-4">
+                    <td className="py-3 px-4">
                       <div className="flex items-start gap-2.5">
                         <div
                           className="w-2 h-2 rounded-full mt-1.5 shrink-0"
@@ -282,21 +282,21 @@ export const AssetTable: React.FC<AssetTableProps> = ({
                         />
                         <div className="min-w-0">
                           <div className="flex items-center gap-1.5">
-                            <span className="font-bold text-slate-100 font-mono tracking-tight text-sm">
+                            <span className="font-semibold text-slate-100">
                               {asset.symbol}
                             </span>
                             {isClosedPosition(asset) && (
-                              <span className="text-[10px] px-1.5 rounded bg-slate-800 text-slate-300 border border-slate-700 font-sans">
+                              <span className="text-xs px-1.5 rounded bg-slate-800 text-slate-300 border border-slate-700 font-sans">
                                 Kapandı
                               </span>
                             )}
                             {isGold && (
-                              <span className="text-[10px] px-1.5 py-0.2 rounded bg-amber-950/40 text-amber-300 border border-amber-900/40 font-mono">
+                              <span className="text-xs px-1.5 py-0.5 rounded bg-amber-950/40 text-amber-300 border border-amber-900/40 tabular-nums">
                                 {goldDetails?.shortName}
                               </span>
                             )}
                           </div>
-                          <div className="text-[11px] text-slate-400 truncate max-w-xs mt-0.5">
+                          <div className="text-xs text-slate-400 truncate max-w-[16rem] mt-0.5" title={asset.name}>
                             {asset.name}
                           </div>
                         </div>
@@ -304,31 +304,31 @@ export const AssetTable: React.FC<AssetTableProps> = ({
                     </td>
 
                     {/* Quantity */}
-                    <td className="py-3.5 px-4 text-right font-mono tabular-nums text-slate-200">
+                    <td className="py-3 px-4 text-right tabular-nums whitespace-nowrap text-slate-200">
                       <span className="font-semibold">{formatNumber(asset.quantity, asset.quantity % 1 === 0 ? 0 : 4)}</span>
-                      <span className="text-slate-500 text-[11px] ml-1">
+                      <span className="text-slate-500 text-xs ml-1">
                         {isGold && !goldDetails?.isUnitPiece ? 'gr' : 'ad.'}
                       </span>
                     </td>
 
                     {/* Cost */}
-                    <td className="py-3.5 px-4 text-right font-mono tabular-nums text-slate-300">
+                    <td className="py-3 px-4 text-right tabular-nums whitespace-nowrap text-slate-300">
                       <div>
                         {formatCurrency(asset.costPrice, asset.costCurrency, 2)}
                       </div>
-                      <div className="text-[10px] text-slate-500">
-                        Top: {formatCurrency(asset.quantity * asset.costPrice, asset.costCurrency, 0)}
+                      <div className="text-xs text-slate-500">
+                        Toplam {formatCurrency(asset.quantity * asset.costPrice, asset.costCurrency, 0)}
                       </div>
                     </td>
 
                     {/* Current Price */}
-                    <td className="py-3.5 px-4 text-right font-mono tabular-nums">
-                      <div className="font-bold text-white">
+                    <td className="py-3 px-4 text-right tabular-nums whitespace-nowrap">
+                      <div className="font-semibold text-white">
                         {formatCurrency(asset.currentPrice, asset.currentCurrency, 2)}
                       </div>
                       {asset.priceStale && (
                         <div
-                          className="inline-flex items-center gap-1 text-[10px] text-amber-400"
+                          className="flex items-center justify-end gap-1 text-xs text-amber-400"
                           title={`Son güncellemede canlı fiyat alınamadı. Gösterilen fiyat: ${new Date(asset.lastUpdated).toLocaleString('tr-TR')}`}
                         >
                           <AlertTriangle className="w-3 h-3" />
@@ -338,25 +338,25 @@ export const AssetTable: React.FC<AssetTableProps> = ({
                       <button
                         onClick={() => onQuickPriceEdit(asset)}
                         title="Fiyatı elle güncelle"
-                        className="text-[10px] text-indigo-400 hover:text-indigo-300 underline inline-block"
+                        className="text-xs text-indigo-400 hover:text-indigo-300 hover:underline"
                       >
                         Fiyat Değiştir
                       </button>
                     </td>
 
                     {/* Total Value */}
-                    <td className="py-3.5 px-4 text-right font-mono tabular-nums">
-                      <div className="font-bold text-indigo-300 text-sm">
+                    <td className="py-3 px-4 text-right tabular-nums whitespace-nowrap">
+                      <div className="font-semibold text-indigo-300">
                         {formatCurrency(asset.displayValue, baseCurrency, 2)}
                       </div>
-                      <div className="text-[10px] text-slate-500">
+                      <div className="text-xs text-slate-500">
                         {baseCurrency === 'TRY' ? `≈ $${formatNumber(asset.pl.valueUSD, 0)}` : `≈ ₺${formatNumber(asset.pl.valueTRY, 0)}`}
                       </div>
                     </td>
 
                     {/* Portföy Payı (%) */}
-                    <td className="py-3.5 px-4 text-right font-mono tabular-nums">
-                      <div className="font-bold text-slate-200 text-xs">
+                    <td className="py-3 px-4 text-right tabular-nums whitespace-nowrap">
+                      <div className="font-semibold text-slate-200">
                         %{asset.portfolioSharePercent.toFixed(1)}
                       </div>
                       <div className="w-16 h-1.5 bg-slate-900 rounded-full overflow-hidden ml-auto mt-1 border border-slate-800">
@@ -371,16 +371,16 @@ export const AssetTable: React.FC<AssetTableProps> = ({
                     </td>
 
                     {/* Profit / Loss */}
-                    <td className="py-3.5 px-4 text-right font-mono tabular-nums">
-                      <div className={`font-bold ${isPositive ? 'text-emerald-400' : 'text-rose-400'}`}>
+                    <td className="py-3 px-4 text-right tabular-nums whitespace-nowrap">
+                      <div className={`font-semibold ${isPositive ? 'text-emerald-400' : 'text-rose-400'}`}>
                         {isPositive ? '+' : ''}{formatCurrency(asset.displayProfit, baseCurrency, 0)}
                       </div>
-                      <div className={`text-[11px] font-semibold ${isPositive ? 'text-emerald-400' : 'text-rose-400'}`}>
+                      <div className={`text-xs font-medium ${isPositive ? 'text-emerald-400' : 'text-rose-400'}`}>
                         {formatPercent(asset.pl.profitPercent)}
                       </div>
                       {!!asset.realizedProfit && (
                         <div
-                          className={`text-[10px] ${asset.realizedProfit > 0 ? 'text-emerald-500/80' : 'text-rose-500/80'}`}
+                          className={`text-xs ${asset.realizedProfit > 0 ? 'text-emerald-500/80' : 'text-rose-500/80'}`}
                           title="Satışlardan gerçekleşen kâr/zarar"
                         >
                           Gerç.: {asset.realizedProfit > 0 ? '+' : '-'}
@@ -390,28 +390,28 @@ export const AssetTable: React.FC<AssetTableProps> = ({
                     </td>
 
                     {/* Actions */}
-                    <td className="py-3.5 px-4 text-center">
+                    <td className="py-3 px-4 text-center">
                       <div className="flex items-center justify-center gap-1 opacity-80 group-hover:opacity-100 transition-opacity">
                         <button
                           onClick={() => onOpenTransactions(asset)}
                           title="Alış / Satış İşlemleri"
-                          className="p-1.5 text-emerald-400 hover:text-emerald-300 bg-emerald-950/20 hover:bg-emerald-950/50 rounded-lg transition-colors"
+                          className="w-8 h-8 inline-flex items-center justify-center text-emerald-400 hover:text-emerald-300 bg-emerald-950/20 hover:bg-emerald-950/50 rounded-lg transition-colors"
                         >
-                          <ArrowLeftRight className="w-3.5 h-3.5" />
+                          <ArrowLeftRight className="w-4 h-4" />
                         </button>
                         <button
                           onClick={() => onEditAsset(asset)}
                           title="Varlığı Düzenle"
-                          className="p-1.5 text-slate-400 hover:text-white bg-slate-800/80 hover:bg-slate-700 rounded-lg transition-colors"
+                          className="w-8 h-8 inline-flex items-center justify-center text-slate-400 hover:text-white bg-slate-800/80 hover:bg-slate-700 rounded-lg transition-colors"
                         >
-                          <Edit2 className="w-3.5 h-3.5" />
+                          <Edit2 className="w-4 h-4" />
                         </button>
                         <button
                           onClick={() => onDeleteAsset(asset.id)}
                           title="Varlığı Sil"
-                          className="p-1.5 text-rose-400 hover:text-rose-300 bg-rose-950/20 hover:bg-rose-950/50 rounded-lg transition-colors"
+                          className="w-8 h-8 inline-flex items-center justify-center text-rose-400 hover:text-rose-300 bg-rose-950/20 hover:bg-rose-950/50 rounded-lg transition-colors"
                         >
-                          <Trash2 className="w-3.5 h-3.5" />
+                          <Trash2 className="w-4 h-4" />
                         </button>
                       </div>
                     </td>
@@ -424,11 +424,11 @@ export const AssetTable: React.FC<AssetTableProps> = ({
       </div>
 
       {/* Table Footer Summary */}
-      <div className="p-3.5 px-5 bg-slate-900/60 border-t border-slate-800 text-xs text-slate-400 flex items-center justify-between">
-        <span className="font-mono">
+      <div className="px-5 py-3 bg-slate-900/60 border-t border-slate-800 text-sm text-slate-400 flex flex-wrap items-center justify-between gap-2">
+        <span className="tabular-nums">
           Gösterilen Varlık: {filteredAndSortedAssets.length} / {assets.length}
         </span>
-        <span className="text-[11px] text-slate-500">
+        <span className="text-xs text-slate-500">
           Tüm veriler tarayıcınızın yerel belleğinde (localStorage) saklanmaktadır
         </span>
       </div>

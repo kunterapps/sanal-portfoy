@@ -33,7 +33,6 @@ import {
   sanitizeSnapshots,
   upsertTodaySnapshot,
 } from './utils/snapshots';
-import { triggerDownloadStandaloneHtml } from './utils/standaloneHtmlGenerator';
 import { getCashUnitPrice } from './utils/currency';
 import { applyTransactions, ensureTransactions, TransactionError } from './utils/transactions';
 import { TransactionModal } from './components/TransactionModal';
@@ -322,7 +321,7 @@ export default function App() {
     <div className="min-h-screen bg-[#090d16] text-slate-100 flex flex-col selection:bg-indigo-500 selection:text-white">
       {/* Toast Notification */}
       {toastMessage && (
-        <div className="fixed bottom-6 right-6 z-50 bg-slate-900 border border-indigo-500/50 text-white px-4 py-2.5 rounded-xl shadow-2xl text-xs font-medium flex items-center gap-2 animate-bounce">
+        <div className="fixed bottom-6 right-6 z-50 bg-slate-900 border border-indigo-500/50 text-white px-4 py-2.5 rounded-xl shadow-2xl text-sm font-medium flex items-center gap-2">
           <span className="w-2 h-2 rounded-full bg-indigo-400" />
           <span>{toastMessage}</span>
         </div>
@@ -338,7 +337,6 @@ export default function App() {
           setIsAssetModalOpen(true);
         }}
         onOpenExportModal={() => setIsExportModalOpen(true)}
-        onDownloadHtml={() => triggerDownloadStandaloneHtml(assets, rates, snapshots)}
       />
 
       {/* Main Viewport Container */}
@@ -403,21 +401,14 @@ export default function App() {
       </main>
 
       {/* Footer */}
-      <footer className="border-t border-slate-900 bg-[#090d16] py-6 px-4 sm:px-6 lg:px-8 text-xs text-slate-500">
-        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
+      <footer className="border-t border-slate-900 bg-[#090d16] py-6 text-xs text-slate-500">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-2">
             <span className="font-bold text-slate-400">PORTFÖYÜM</span>
             <span>·</span>
             <span>Kişisel Yatırım ve Portföy Takip Platformu</span>
           </div>
-          <div className="flex items-center gap-4 text-[11px]">
-            <button
-              onClick={() => triggerDownloadStandaloneHtml(assets, rates, snapshots)}
-              className="text-indigo-400 hover:text-indigo-300 transition-colors"
-            >
-              GitHub Pages HTML İndir
-            </button>
-            <span>·</span>
+          <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1">
             <button
               onClick={() => setIsExportModalOpen(true)}
               className="text-slate-400 hover:text-slate-200 transition-colors"

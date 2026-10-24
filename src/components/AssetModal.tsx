@@ -266,7 +266,7 @@ export const AssetModal: React.FC<AssetModalProps> = ({
                   </option>
                 ))}
               </select>
-              <div className="text-[11px] text-amber-200/70">
+              <div className="text-xs text-amber-200/70">
                 Seçtiğiniz altın türünün ağırlığı ve ayarı canlı has altın fiyatına göre otomatik hesaplanır.
               </div>
             </div>
@@ -275,7 +275,7 @@ export const AssetModal: React.FC<AssetModalProps> = ({
           {/* Quick Suggestions Chips */}
           {suggestions.length > 0 && (
             <div>
-              <div className="flex items-center gap-1.5 text-[11px] text-slate-400 mb-1.5">
+              <div className="flex items-center gap-1.5 text-xs text-slate-400 mb-1.5">
                 <Sparkles className="w-3 h-3 text-indigo-400" />
                 <span>Popüler Örnekler:</span>
               </div>
@@ -285,7 +285,7 @@ export const AssetModal: React.FC<AssetModalProps> = ({
                     key={s.symbol}
                     type="button"
                     onClick={() => applySuggestion(s)}
-                    className="px-2.5 py-1 rounded-md bg-slate-900 hover:bg-slate-800 border border-slate-800 text-[11px] text-slate-300 hover:text-white transition-colors font-mono"
+                    className="px-2.5 py-1 rounded-md bg-slate-900 hover:bg-slate-800 border border-slate-800 text-xs text-slate-300 hover:text-white transition-colors tabular-nums"
                   >
                     {s.symbol}
                   </button>
@@ -306,7 +306,7 @@ export const AssetModal: React.FC<AssetModalProps> = ({
                 value={symbol}
                 onChange={(e) => setSymbol(e.target.value)}
                 placeholder={category === 'BIST' ? 'örn: THYAO' : category === 'FOREIGN_STOCK' ? 'örn: NVDA' : 'örn: TCD'}
-                className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3.5 py-2.5 text-white font-mono uppercase focus:outline-none focus:border-indigo-500"
+                className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3.5 py-2.5 text-white tabular-nums uppercase focus:outline-none focus:border-indigo-500"
               />
             </div>
 
@@ -326,7 +326,7 @@ export const AssetModal: React.FC<AssetModalProps> = ({
 
           {/* Quantity & Unit Cost */}
           {managedByTransactions && (
-            <p className="text-[11px] text-amber-300 bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-2">
+            <p className="text-xs text-amber-300 bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-2">
               Bu varlığın alış/satış geçmişi var. Miktar ve ortalama maliyet işlemlerden hesaplanır; değiştirmek için
               tablodaki ⇄ (Alış / Satış İşlemleri) butonunu kullanın.
             </p>
@@ -346,7 +346,7 @@ export const AssetModal: React.FC<AssetModalProps> = ({
                 required
                 value={quantity}
                 onChange={(e) => setQuantity(parseFloat(e.target.value) || 0)}
-                className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3.5 py-2.5 text-white font-mono focus:outline-none focus:border-indigo-500"
+                className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3.5 py-2.5 text-white tabular-nums focus:outline-none focus:border-indigo-500"
               />
             </div>
 
@@ -361,7 +361,7 @@ export const AssetModal: React.FC<AssetModalProps> = ({
                 required
                 value={costPrice}
                 onChange={(e) => setCostPrice(parseFloat(e.target.value) || 0)}
-                className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3.5 py-2.5 text-white font-mono focus:outline-none focus:border-indigo-500"
+                className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3.5 py-2.5 text-white tabular-nums focus:outline-none focus:border-indigo-500"
               />
             </div>
 
@@ -395,7 +395,7 @@ export const AssetModal: React.FC<AssetModalProps> = ({
                 required
                 value={currentPrice}
                 onChange={(e) => setCurrentPrice(parseFloat(e.target.value) || 0)}
-                className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3.5 py-2.5 text-white font-mono focus:outline-none focus:border-indigo-500"
+                className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3.5 py-2.5 text-white tabular-nums focus:outline-none focus:border-indigo-500"
               />
             </div>
 
@@ -431,7 +431,7 @@ export const AssetModal: React.FC<AssetModalProps> = ({
           </div>
 
           {/* Total Preview Box */}
-          <div className="p-3.5 bg-slate-900/80 border border-slate-800 rounded-xl flex items-center justify-between font-mono">
+          <div className="p-3.5 bg-slate-900/80 border border-slate-800 rounded-xl flex items-center justify-between tabular-nums">
             <span className="text-slate-400 text-xs">Hesaplanan Toplam Değer:</span>
             <div className="text-right">
               <div className="text-white font-bold text-sm">
@@ -439,7 +439,7 @@ export const AssetModal: React.FC<AssetModalProps> = ({
                 {new Intl.NumberFormat('tr-TR', { maximumFractionDigits: 2 }).format(quantity * currentPrice)}
               </div>
               {currentCurrency !== 'TRY' && (
-                <div className="text-[11px] text-slate-400 font-normal">
+                <div className="text-xs text-slate-400 font-normal">
                   ≈ ₺{new Intl.NumberFormat('tr-TR', { maximumFractionDigits: 0 }).format(
                     quantity * currentPrice * (currentCurrency === 'USD' ? (rates.USD_TRY || 49.75) : currentCurrency === 'EUR' ? (rates.EUR_TRY || 55.80) : (rates.GBP_TRY || 66.65))
                   )}

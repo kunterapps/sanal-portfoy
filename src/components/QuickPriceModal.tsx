@@ -40,7 +40,7 @@ export const QuickPriceModal: React.FC<QuickPriceModalProps> = ({
         <div className="flex items-center justify-between border-b border-slate-800 pb-3">
           <div>
             <h3 className="text-sm font-bold text-white tracking-tight">Fiyatı Elle Güncelle</h3>
-            <span className="text-xs text-indigo-400 font-mono font-semibold">{asset.symbol}</span>
+            <span className="text-xs text-indigo-400 tabular-nums font-semibold">{asset.symbol}</span>
             <span className="text-xs text-slate-400 ml-1">· {asset.name}</span>
           </div>
           <button
@@ -64,11 +64,11 @@ export const QuickPriceModal: React.FC<QuickPriceModalProps> = ({
               autoFocus
               value={price}
               onChange={(e) => setPrice(parseFloat(e.target.value) || 0)}
-              className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3.5 py-2.5 text-white font-mono text-base font-bold focus:outline-none focus:border-indigo-500"
+              className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3.5 py-2.5 text-white tabular-nums text-base font-bold focus:outline-none focus:border-indigo-500"
             />
           </div>
 
-          <div className="text-[11px] text-slate-500 font-mono">
+          <div className="text-xs text-slate-500 tabular-nums">
             Mevcut kayıtlı fiyat: {formatCurrency(asset.currentPrice, asset.currentCurrency, 2)}
           </div>
 
