@@ -1,0 +1,6 @@
+{
+  "name": "Kişisel Yatırım ve Portföy Takip",
+  "description": "BIST, Yabancı Hisseler, TEFAS/BEFAS Fonları, Altın ve Döviz varlıklarınızı canlı fiyatlar, çift para birimli analizler ve kâr/zarar grafikleriyle takip edin.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
