@@ -1,14 +1,27 @@
 import { PortfolioAsset, ExchangeRates } from '../types/portfolio';
 
 /**
+ * JSON.stringify for embedding inside an inline <script>. Escapes characters
+ * that could close the script tag (e.g. an asset note containing "</script>").
+ */
+export function toInlineScriptJson(value: unknown): string {
+  return JSON.stringify(value, null, 2)
+    .replace(/</g, '\\u003c')
+    .replace(/>/g, '\\u003e')
+    .replace(/&/g, '\\u0026')
+    .replace(/\u2028/g, '\\u2028')
+    .replace(/\u2029/g, '\\u2029');
+}
+
+/**
  * Generates a complete, single-file HTML application containing Tailwind CDN,
  * Vue 3 CDN, Chart.js CDN, embedded reactive code, and initial portfolio state.
  * This file runs 100% standalone and can be directly committed as index.html
  * to GitHub Pages.
  */
 export function generateStandaloneHtml(assets: PortfolioAsset[], rates: ExchangeRates): string {
-  const assetsJson = JSON.stringify(assets, null, 2);
-  const ratesJson = JSON.stringify(rates, null, 2);
+  const assetsJson = toInlineScriptJson(assets);
+  const ratesJson = toInlineScriptJson(rates);
 
   return `<!DOCTYPE html>
 <html lang="tr">
@@ -24,9 +37,9 @@ export function generateStandaloneHtml(assets: PortfolioAsset[], rates: Exchange
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <!-- Vue.js 3 CDN -->
-  <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+  <script src="https://unpkg.com/vue@3.5.13/dist/vue.global.prod.js"></script>
   <!-- Chart.js CDN -->
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
   <script>
     tailwind.config = {
       darkMode: 'class',
@@ -672,7 +685,8 @@ export function generateStandaloneHtml(assets: PortfolioAsset[], rates: Exchange
             // 3. Update all gold/commodity & cash holdings with live prices
             assets.value.forEach(a => {
               if (a.category === 'COMMODITY' && a.goldType) {
-                a.currentPrice = getGoldPrice(a.goldType);
+                // getGoldPrice is TRY-based; convert for e.g. USD-held Ons Altın
+                a.currentPrice = getGoldPrice(a.goldType) / (convertToTRY(1, a.currentCurrency) || 1);
                 a.lastUpdated = new Date().toISOString();
               } else if (a.category === 'CASH') {
                 const sym = (a.symbol || '').toUpperCase().trim();

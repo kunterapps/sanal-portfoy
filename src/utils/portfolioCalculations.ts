@@ -8,6 +8,7 @@ import {
   TimeRange, 
   PortfolioSnapshot 
 } from '../types/portfolio';
+import { detectCashCurrency } from './currency';
 
 export const CATEGORY_METADATA: Record<AssetCategory, { label: string; color: string; shortLabel: string }> = {
   FOREIGN_STOCK: { label: 'Yabancı Hisse & ETF', shortLabel: 'Yabancı Hisse', color: '#6366F1' }, // Indigo
@@ -201,14 +202,8 @@ export function calculateCurrencySummaries(
   const summaries = currencies.map((curr) => {
     let valueTRY = 0;
     assets.forEach((asset) => {
-      let expCurr: Currency = asset.currentCurrency;
-      if (asset.category === 'CASH') {
-        const sym = (asset.symbol || '').toUpperCase().trim();
-        if (sym === 'USD' || sym.includes('USD') || sym.includes('DOLAR')) expCurr = 'USD';
-        else if (sym === 'EUR' || sym.includes('EUR') || sym.includes('AVRO')) expCurr = 'EUR';
-        else if (sym === 'GBP' || sym.includes('GBP') || sym.includes('STERL')) expCurr = 'GBP';
-        else if (sym === 'TRY' || sym.includes('TRY') || sym.includes('TL')) expCurr = 'TRY';
-      }
+      const expCurr: Currency =
+        (asset.category === 'CASH' && detectCashCurrency(asset)) || asset.currentCurrency;
       if (expCurr === curr) {
         const pl = getAssetProfitLoss(asset, rates);
         valueTRY += pl.valueTRY;

@@ -2,6 +2,7 @@ import React, { useRef, useState } from 'react';
 import { X, Download, Upload, FileCode, CheckCircle2, Copy } from 'lucide-react';
 import { PortfolioAsset, ExchangeRates } from '../types/portfolio';
 import { triggerDownloadStandaloneHtml } from '../utils/standaloneHtmlGenerator';
+import { parsePortfolioBackup } from '../utils/importValidation';
 
 interface ExportModalProps {
   isOpen: boolean;
@@ -54,27 +55,37 @@ export const ExportModal: React.FC<ExportModalProps> = ({
     reader.onload = (event) => {
       try {
         const content = event.target?.result as string;
-        const parsed = JSON.parse(content);
-        let validAssets: PortfolioAsset[] = [];
+        const { assets: validAssets, errors } = parsePortfolioBackup(JSON.parse(content));
 
-        if (Array.isArray(parsed)) {
-          validAssets = parsed;
-        } else if (parsed && Array.isArray(parsed.assets)) {
-          validAssets = parsed.assets;
-        } else {
-          throw new Error('Geçersiz dosya formatı');
+        if (validAssets.length === 0) {
+          setImportStatus(`Hata: Yüklenecek geçerli varlık bulunamadı. ${errors.slice(0, 3).join('; ')}`);
+          return;
         }
 
-        if (validAssets.length >= 0) {
-          onImportAssets(validAssets);
-          setImportStatus(`${validAssets.length} adet varlık başarıyla yüklendi!`);
-          setTimeout(() => {
+        if (
+          assets.length > 0 &&
+          !window.confirm(
+            `Mevcut ${assets.length} varlığınız silinip yedekteki ${validAssets.length} varlık yüklenecek. Devam edilsin mi?`
+          )
+        ) {
+          return;
+        }
+
+        onImportAssets(validAssets);
+        const skipped = errors.length > 0 ? ` (${errors.length} kayıt atlandı: ${errors.slice(0, 3).join('; ')})` : '';
+        setImportStatus(`${validAssets.length} adet varlık başarıyla yüklendi!${skipped}`);
+        setTimeout(
+          () => {
             setImportStatus(null);
             onClose();
-          }, 1500);
-        }
+          },
+          errors.length > 0 ? 4000 : 1500
+        );
       } catch (err) {
         setImportStatus('Hata: Dosya geçerli bir portföy yedeği değil.');
+      } finally {
+        // Allow re-selecting the same file
+        if (fileInputRef.current) fileInputRef.current.value = '';
       }
     };
     reader.readAsText(file);

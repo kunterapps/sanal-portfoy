@@ -27,6 +27,7 @@ import {
   generateHistoricalTrend 
 } from './utils/portfolioCalculations';
 import { triggerDownloadStandaloneHtml } from './utils/standaloneHtmlGenerator';
+import { getCashUnitPrice } from './utils/currency';
 
 const STORAGE_KEY = 'my_personal_portfolio_assets';
 const RATES_STORAGE_KEY = 'my_personal_portfolio_rates';
@@ -102,27 +103,15 @@ export default function App() {
         const liveRates = await fetchLiveExchangeRates();
         if (mounted) {
           setRates(liveRates);
-          // Immediately sync cash & gold holdings with live rates
-          setAssets((prevAssets) => {
-            if (!prevAssets || prevAssets.length === 0) return prevAssets;
-            return prevAssets.map((asset) => {
-              if (asset.category === 'CASH') {
-                const sym = (asset.symbol || '').toUpperCase().trim();
-                const isUSD = sym === 'USD' || sym.includes('USD') || sym.includes('DOLAR') || (asset.name || '').toLowerCase().includes('dolar');
-                const isEUR = sym === 'EUR' || sym.includes('EUR') || sym.includes('AVRO') || (asset.name || '').toLowerCase().includes('euro');
-                const isGBP = sym === 'GBP' || sym.includes('GBP') || sym.includes('STERL') || (asset.name || '').toLowerCase().includes('sterlin');
-
-                if (asset.currentCurrency === 'TRY') {
-                  const correctPrice = isUSD ? liveRates.USD_TRY : isEUR ? liveRates.EUR_TRY : isGBP ? liveRates.GBP_TRY : 1;
-                  return { ...asset, currentPrice: correctPrice, lastUpdated: new Date().toISOString() };
-                } else if (asset.currentCurrency === 'USD') {
-                  const correctPrice = isUSD ? 1 : isEUR ? (liveRates.EUR_USD || 1.12) : isGBP ? (liveRates.GBP_USD || 1.34) : (1 / liveRates.USD_TRY);
-                  return { ...asset, currentPrice: correctPrice, lastUpdated: new Date().toISOString() };
-                }
-              }
-              return asset;
-            });
-          });
+          // Immediately sync cash holdings with live rates
+          setAssets((prevAssets) =>
+            prevAssets.map((asset) => {
+              if (asset.category !== 'CASH') return asset;
+              const price = getCashUnitPrice(asset, liveRates);
+              if (price === null || price <= 0) return asset;
+              return { ...asset, currentPrice: price, lastUpdated: new Date().toISOString() };
+            })
+          );
         }
       } catch (err) {
         console.warn('Initial rates fetch failed, using cached/defaults', err);

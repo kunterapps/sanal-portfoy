@@ -1,5 +1,6 @@
 import { ExchangeRates, PortfolioAsset } from '../types/portfolio';
 import { calculateGoldUnitPrice } from '../utils/goldCalculations';
+import { crossRate, getCashUnitPrice } from '../utils/currency';
 
 // Robust helper to parse Turkish currency and number strings (e.g. "6.384,76", "$3.996,40", "49,7746")
 export function parseTurkishNumber(val: unknown): number {
@@ -254,44 +255,15 @@ export async function fetchLivePriceForAsset(
         rates
       );
       if (unitPrice > 0) {
-        return { price: unitPrice, success: true };
+        // calculateGoldUnitPrice is TRY-based; e.g. Ons Altın is usually held in USD
+        return { price: unitPrice * crossRate('TRY', asset.currentCurrency, rates), success: true };
       }
     }
 
     // 2. Cash Currencies (USD, EUR, GBP, TRY)
     if (asset.category === 'CASH') {
-      const sym = (asset.symbol || '').toUpperCase().trim();
-      const curr = asset.currentCurrency;
-
-      const isUSD = sym === 'USD' || sym.includes('USD') || sym.includes('DOLAR') || (asset.name || '').toLowerCase().includes('dolar');
-      const isEUR = sym === 'EUR' || sym.includes('EUR') || sym.includes('AVRO') || (asset.name || '').toLowerCase().includes('euro');
-      const isGBP = sym === 'GBP' || sym.includes('GBP') || sym.includes('STERL') || (asset.name || '').toLowerCase().includes('sterlin');
-      const isTRY = sym === 'TRY' || sym === 'TL' || sym.includes('TRY') || sym.includes('TL') || (asset.name || '').toLowerCase().includes('lira');
-
-      if (isUSD) {
-        if (curr === 'TRY') return { price: rates.USD_TRY, success: true };
-        if (curr === 'USD') return { price: 1, success: true };
-        if (curr === 'EUR') return { price: 1 / (rates.EUR_USD || 1.12), success: true };
-        if (curr === 'GBP') return { price: 1 / (rates.GBP_USD || 1.34), success: true };
-      } else if (isEUR) {
-        if (curr === 'TRY') return { price: rates.EUR_TRY, success: true };
-        if (curr === 'EUR') return { price: 1, success: true };
-        if (curr === 'USD') return { price: rates.EUR_USD || 1.12, success: true };
-        if (curr === 'GBP') return { price: (rates.EUR_TRY / rates.GBP_TRY) || 0.84, success: true };
-      } else if (isGBP) {
-        if (curr === 'TRY') return { price: rates.GBP_TRY, success: true };
-        if (curr === 'GBP') return { price: 1, success: true };
-        if (curr === 'USD') return { price: rates.GBP_USD || 1.34, success: true };
-        if (curr === 'EUR') return { price: (rates.GBP_TRY / rates.EUR_TRY) || 1.19, success: true };
-      } else if (isTRY) {
-        if (curr === 'TRY') return { price: 1, success: true };
-        if (curr === 'USD') return { price: 1 / (rates.USD_TRY || 49.75), success: true };
-        if (curr === 'EUR') return { price: 1 / (rates.EUR_TRY || 55.80), success: true };
-        if (curr === 'GBP') return { price: 1 / (rates.GBP_TRY || 66.65), success: true };
-      }
-
-      // Default fallback
-      return { price: curr === 'TRY' ? (isUSD ? rates.USD_TRY : 1) : 1, success: true };
+      const price = getCashUnitPrice(asset, rates);
+      if (price !== null && price > 0) return { price, success: true };
     }
 
     // 3. BIST Stocks (THYAO -> THYAO.IS)
@@ -371,8 +343,7 @@ export async function fetchLivePriceForAsset(
           const data = await res.json();
           const p = parseFloat(data.price);
           if (!isNaN(p) && p > 0) {
-            // If asset currency is TRY, convert to TRY
-            const finalPrice = asset.currentCurrency === 'TRY' ? p * rates.USD_TRY : p;
+            const finalPrice = p * crossRate('USD', asset.currentCurrency, rates);
             return { price: finalPrice, success: true };
           }
         }
@@ -383,7 +354,7 @@ export async function fetchLivePriceForAsset(
       // 6.2 Yahoo Finance fallback (BTC-USD, ETH-USD)
       const yahooPrice = await fetchYahooQuote(`${sym}-USD`);
       if (yahooPrice !== null && yahooPrice > 0) {
-        const finalPrice = asset.currentCurrency === 'TRY' ? yahooPrice * rates.USD_TRY : yahooPrice;
+        const finalPrice = yahooPrice * crossRate('USD', asset.currentCurrency, rates);
         return { price: finalPrice, success: true };
       }
     }
