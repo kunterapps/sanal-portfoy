@@ -81,6 +81,52 @@ export function parseTefasHistory(data: unknown): Quote | null {
   return { price: best.price, currency: 'TRY', source: 'tefas', asOf: new Date(best.time).toISOString() };
 }
 
+export interface FundAttempt {
+  source: string;
+  status: number;
+  ok: boolean;
+  note?: string;
+}
+
+const TEFAS = 'https://www.tefas.gov.tr';
+const TEFAS_HEADERS = {
+  'User-Agent': USER_AGENT,
+  'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+  'X-Requested-With': 'XMLHttpRequest',
+  Origin: TEFAS,
+  Referer: `${TEFAS}/TarihselVeriler.aspx`,
+  Accept: 'application/json, text/javascript, */*; q=0.01',
+};
+
+function snippet(text: string): string {
+  return text.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 120);
+}
+
+function errorNote(err: unknown): string {
+  return err instanceof Error ? `${err.name}: ${err.message}`.slice(0, 120) : 'error';
+}
+
+/** Turns Set-Cookie response headers into a Cookie request header. */
+export function cookieHeader(headers: Headers): string {
+  const list =
+    typeof headers.getSetCookie === 'function'
+      ? headers.getSetCookie()
+      : (headers.get('set-cookie') || '').split(/,(?=\s*[^;,=\s]+=)/);
+  return list
+    .map((c) => c.split(';')[0].trim())
+    .filter((c) => c.includes('='))
+    .join('; ');
+}
+
+/** Reads "Son Fiyat (TL)" from a TEFAS FonAnaliz page. */
+export function parseTefasFundPage(html: string, nowMs: number = Date.now()): Quote | null {
+  const match = html.match(/Son Fiyat[^<]*(?:<[^>]+>\s*)*?([\d.]*\d,\d+)/i);
+  if (!match) return null;
+  const price = parseFloat(match[1].replace(/\./g, '').replace(',', '.'));
+  if (!(price > 0)) return null;
+  return { price, currency: 'TRY', source: 'tefas', asOf: new Date(nowMs).toISOString() };
+}
+
 function tefasDate(d: Date): string {
   return `${String(d.getDate()).padStart(2, '0')}.${String(d.getMonth() + 1).padStart(2, '0')}.${d.getFullYear()}`;
 }
@@ -119,41 +165,91 @@ export function createPriceService(fetchFn: FetchFn = fetch, now: () => number =
     });
   }
 
+  const fundDetails = new Map<string, FundAttempt[]>();
+
+  async function loadFund(fund: string, kind: 'YAT' | 'EMK'): Promise<{ quote: Quote | null; attempts: FundAttempt[] }> {
+    const attempts: FundAttempt[] = [];
+    // Funds price once per business day; two weeks covers weekends and holidays
+    const body = new URLSearchParams({
+      fontip: kind,
+      fonkod: fund,
+      bastarih: tefasDate(new Date(now() - 14 * 86_400_000)),
+      bittarih: tefasDate(new Date(now())),
+    }).toString();
+
+    const postHistory = async (source: string, cookie?: string) => {
+      try {
+        const res = await fetchWithTimeout(fetchFn, `${TEFAS}/api/DB/BindHistoryInfo`, {
+          method: 'POST',
+          headers: { ...TEFAS_HEADERS, ...(cookie ? { Cookie: cookie } : {}) },
+          body,
+        });
+        const text = await res.text();
+        let quote: Quote | null = null;
+        try {
+          quote = res.ok ? parseTefasHistory(JSON.parse(text)) : null;
+        } catch {
+          // Not JSON: usually a firewall / bot-check page
+        }
+        attempts.push({ source, status: res.status, ok: !!quote, ...(quote ? {} : { note: snippet(text) }) });
+        return quote;
+      } catch (err) {
+        attempts.push({ source, status: 0, ok: false, note: errorNote(err) });
+        return null;
+      }
+    };
+
+    // 1. History API directly
+    let quote = await postHistory('tefas-api');
+    if (quote) return { quote, attempts };
+
+    // 2. Same API with the session cookies the site sets on its own page
+    let cookie = '';
+    try {
+      const page = await fetchWithTimeout(fetchFn, `${TEFAS}/TarihselVeriler.aspx`, {
+        headers: { 'User-Agent': USER_AGENT, Accept: 'text/html' },
+      });
+      cookie = cookieHeader(page.headers);
+      await page.text();
+    } catch (err) {
+      attempts.push({ source: 'tefas-cookie', status: 0, ok: false, note: errorNote(err) });
+    }
+    if (cookie) {
+      quote = await postHistory('tefas-api+cookie', cookie);
+      if (quote) return { quote, attempts };
+    }
+
+    // 3. Fund analysis page, which shows the latest price
+    try {
+      const res = await fetchWithTimeout(fetchFn, `${TEFAS}/FonAnaliz.aspx?FonKod=${encodeURIComponent(fund)}`, {
+        headers: { 'User-Agent': USER_AGENT, Accept: 'text/html', ...(cookie ? { Cookie: cookie } : {}) },
+      });
+      const html = await res.text();
+      quote = res.ok ? parseTefasFundPage(html, now()) : null;
+      attempts.push({ source: 'tefas-page', status: res.status, ok: !!quote, ...(quote ? {} : { note: snippet(html) }) });
+    } catch (err) {
+      attempts.push({ source: 'tefas-page', status: 0, ok: false, note: errorNote(err) });
+    }
+    return { quote, attempts };
+  }
+
   async function getFundQuote(code: string, kind: 'YAT' | 'EMK'): Promise<Quote | null> {
     const fund = code.trim().toUpperCase();
     if (!FUND_RE.test(fund)) return null;
-    return cached(`tefas:${kind}:${fund}`, 10 * 60_000, async () => {
-      // Funds price once per business day; two weeks covers weekends and holidays
-      const end = new Date(now());
-      const start = new Date(now() - 14 * 86_400_000);
-      const body = new URLSearchParams({
-        fontip: kind,
-        fonkod: fund,
-        bastarih: tefasDate(start),
-        bittarih: tefasDate(end),
-      });
-      try {
-        const res = await fetchWithTimeout(fetchFn, 'https://www.tefas.gov.tr/api/DB/BindHistoryInfo', {
-          method: 'POST',
-          headers: {
-            'User-Agent': USER_AGENT,
-            'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
-            'X-Requested-With': 'XMLHttpRequest',
-            Origin: 'https://www.tefas.gov.tr',
-            Referer: 'https://www.tefas.gov.tr/TarihselVeriler.aspx',
-            Accept: 'application/json, text/javascript, */*; q=0.01',
-          },
-          body: body.toString(),
-        });
-        if (!res.ok) return null;
-        return parseTefasHistory(await res.json());
-      } catch {
-        return null;
-      }
+    const key = `tefas:${kind}:${fund}`;
+    return cached(key, 10 * 60_000, async () => {
+      const { quote, attempts } = await loadFund(fund, kind);
+      fundDetails.set(key, attempts);
+      return quote;
     });
   }
 
-  return { getStockQuote, getFundQuote };
+  /** What happened on the last lookup of a fund (for error responses). */
+  function getFundAttempts(code: string, kind: 'YAT' | 'EMK'): FundAttempt[] | undefined {
+    return fundDetails.get(`tefas:${kind}:${code.trim().toUpperCase()}`);
+  }
+
+  return { getStockQuote, getFundQuote, getFundAttempts };
 }
 
 export interface ApiResult {
@@ -161,7 +257,8 @@ export interface ApiResult {
   body: unknown;
 }
 
-type PriceService = Pick<ReturnType<typeof createPriceService>, 'getStockQuote' | 'getFundQuote'>;
+type PriceService = Pick<ReturnType<typeof createPriceService>, 'getStockQuote' | 'getFundQuote'> &
+  Partial<Pick<ReturnType<typeof createPriceService>, 'getFundAttempts'>>;
 
 /**
  * Shared request logic for the Node middleware and the Cloudflare Worker:
@@ -186,7 +283,10 @@ export async function handlePriceRequest(url: URL, method: string, service: Pric
       const kind = url.searchParams.get('kind') === 'EMK' ? 'EMK' : 'YAT';
       if (!FUND_RE.test(code.trim().toUpperCase())) return { status: 400, body: { error: 'Geçersiz fon kodu' } };
       const quote = await service.getFundQuote(code, kind);
-      return quote ? { status: 200, body: quote } : { status: 404, body: { error: 'Fiyat bulunamadı' } };
+      if (quote) return { status: 200, body: quote };
+      // Include what each source answered so a failing setup can be diagnosed from the browser
+      const details = service.getFundAttempts?.(code, kind);
+      return { status: 404, body: { error: 'Fiyat bulunamadı', ...(details ? { details } : {}) } };
     }
 
     return { status: 404, body: { error: 'Bilinmeyen uç nokta' } };
