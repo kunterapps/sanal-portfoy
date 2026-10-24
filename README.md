@@ -13,13 +13,21 @@ npm install
 npm run dev      # http://localhost:3000
 ```
 
+Sürekli kullanım için derleyip sunucuyu başlatın:
+
+```bash
+npm run build
+npm start        # http://localhost:3000
+```
+
 ## Komutlar
 
 | Komut | Açıklama |
 | --- | --- |
 | `npm run dev` | Geliştirme sunucusu |
 | `npm run build` | `dist/` klasörüne üretim derlemesi |
-| `npm run preview` | Derlenmiş uygulamayı yerelde açar |
+| `npm start` | Derlenmiş uygulamayı fiyat API'siyle birlikte 3000 portunda sunar |
+| `npm run preview` | Derlenmiş uygulamayı yerelde açar (fiyat API'si dahil) |
 | `npm run lint` | TypeScript tip kontrolü |
 | `npm test` | Birim testleri (Vitest) |
 
@@ -33,16 +41,20 @@ src/
   types/        Ortak tipler
   data/         Örnek portföy
   test/         Birim testleri
+server/
+  priceApi.ts   Sunucu tarafı fiyat API'si (/api/quote, /api/fund)
 ```
 
 ## Fiyat kaynakları
 
 - **Döviz ve altın:** finans.truncgil.com, ulaşılamazsa Binance (PAXG) ve open.er-api.com.
-- **BIST ve yabancı hisseler:** Yahoo Finance, herkese açık CORS proxy'leri üzerinden.
-- **TEFAS/BEFAS:** birkaç deneme uç noktası.
-- **Kripto:** Binance, ulaşılamazsa Yahoo Finance.
+- **BIST ve yabancı hisseler:** Yahoo Finance, uygulamanın kendi sunucusu üzerinden (`/api/quote`). Fiyat varlığın para birimine çevrilir (ör. EUR işlem gören bir ETF TRY ile takip ediliyorsa).
+- **TEFAS/BEFAS:** tefas.gov.tr, uygulamanın kendi sunucusu üzerinden (`/api/fund`).
+- **Kripto:** Binance, ulaşılamazsa Yahoo Finance (sunucu üzerinden).
 
-Hisse ve fon fiyatları üçüncü taraf proxy'lere bağlı olduğundan her zaman alınamayabilir. Fiyatı alınamayan varlık son bilinen fiyatıyla kalır ve tabloda "Eski fiyat" olarak işaretlenir.
+Sunucu sonuçları önbelleğe alır (hisseler 1 dk, fonlar 10 dk). Fiyatı alınamayan varlık son bilinen fiyatıyla kalır ve tabloda "Eski fiyat" olarak işaretlenir.
+
+Fiyat API'si `npm run dev`, `npm run preview` ve `npm start` ile çalışır. Uygulama sunucusuz bir statik barındırmada (ör. GitHub Pages) yayınlanırsa hisse ve fon fiyatları otomatik güncellenmez; döviz, altın ve kripto güncellenmeye devam eder.
 
 ## Alış / satış işlemleri
 
