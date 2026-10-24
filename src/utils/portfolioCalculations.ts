@@ -4,10 +4,9 @@ import {
   CategorySummary, 
   CurrencySummary, 
   Currency, 
-  AssetCategory, 
-  TimeRange, 
-  PortfolioSnapshot 
+  AssetCategory 
 } from '../types/portfolio';
+import { detectCashCurrency } from './currency';
 
 export const CATEGORY_METADATA: Record<AssetCategory, { label: string; color: string; shortLabel: string }> = {
   FOREIGN_STOCK: { label: 'Yabancı Hisse & ETF', shortLabel: 'Yabancı Hisse', color: '#6366F1' }, // Indigo
@@ -106,6 +105,9 @@ export function calculatePortfolioTotals(assets: PortfolioAsset[], rates: Exchan
   let totalCostTRY = 0;
   let totalValueUSD = 0;
   let totalCostUSD = 0;
+  let realizedProfitTRY = 0;
+  let realizedProfitUSD = 0;
+  let openCount = 0;
 
   assets.forEach((asset) => {
     const pl = getAssetProfitLoss(asset, rates);
@@ -113,18 +115,15 @@ export function calculatePortfolioTotals(assets: PortfolioAsset[], rates: Exchan
     totalCostTRY += pl.costTRY;
     totalValueUSD += pl.valueUSD;
     totalCostUSD += pl.costUSD;
+    // Realized P/L is kept in costCurrency; converted at today's rates
+    realizedProfitTRY += convertToTRY(asset.realizedProfit || 0, asset.costCurrency, rates);
+    realizedProfitUSD += convertToUSD(asset.realizedProfit || 0, asset.costCurrency, rates);
+    if (asset.quantity > 0) openCount++;
   });
 
   const totalProfitTRY = totalValueTRY - totalCostTRY;
   const totalProfitUSD = totalValueUSD - totalCostUSD;
   const totalProfitPercent = totalCostTRY > 0 ? (totalProfitTRY / totalCostTRY) * 100 : 0;
-
-  // Approximate 24h change (calculated from market fluctuations)
-  // Usually between 0.3% to 1.5%
-  const dailyFactor = 0.0084;
-  const dailyChangeTRY = totalValueTRY * dailyFactor;
-  const dailyChangeUSD = totalValueUSD * dailyFactor;
-  const dailyChangePercent = 0.84;
 
   return {
     totalValueTRY,
@@ -134,10 +133,9 @@ export function calculatePortfolioTotals(assets: PortfolioAsset[], rates: Exchan
     totalProfitTRY,
     totalProfitUSD,
     totalProfitPercent,
-    dailyChangeTRY,
-    dailyChangeUSD,
-    dailyChangePercent,
-    assetCount: assets.length,
+    realizedProfitTRY,
+    realizedProfitUSD,
+    assetCount: openCount,
   };
 }
 
@@ -201,14 +199,8 @@ export function calculateCurrencySummaries(
   const summaries = currencies.map((curr) => {
     let valueTRY = 0;
     assets.forEach((asset) => {
-      let expCurr: Currency = asset.currentCurrency;
-      if (asset.category === 'CASH') {
-        const sym = (asset.symbol || '').toUpperCase().trim();
-        if (sym === 'USD' || sym.includes('USD') || sym.includes('DOLAR')) expCurr = 'USD';
-        else if (sym === 'EUR' || sym.includes('EUR') || sym.includes('AVRO')) expCurr = 'EUR';
-        else if (sym === 'GBP' || sym.includes('GBP') || sym.includes('STERL')) expCurr = 'GBP';
-        else if (sym === 'TRY' || sym.includes('TRY') || sym.includes('TL')) expCurr = 'TRY';
-      }
+      const expCurr: Currency =
+        (asset.category === 'CASH' && detectCashCurrency(asset)) || asset.currentCurrency;
       if (expCurr === curr) {
         const pl = getAssetProfitLoss(asset, rates);
         valueTRY += pl.valueTRY;
@@ -227,103 +219,6 @@ export function calculateCurrencySummaries(
   });
 
   return summaries.filter((s) => s.valueTRY > 0);
-}
-
-/**
- * Generates historical performance time series for requested period
- */
-export function generateHistoricalTrend(
-  assets: PortfolioAsset[],
-  rates: ExchangeRates,
-  range: TimeRange,
-  storedSnapshots: PortfolioSnapshot[] = []
-): { date: string; valueTRY: number; valueUSD: number; costTRY: number; profitTRY: number }[] {
-  const currentTotals = calculatePortfolioTotals(assets, rates);
-  
-  if (assets.length === 0) {
-    return [];
-  }
-
-  const now = new Date();
-  let pointsCount = 14;
-  let daysSpan = 7;
-
-  switch (range) {
-    case '1W':
-      daysSpan = 7;
-      pointsCount = 8;
-      break;
-    case '1M':
-      daysSpan = 30;
-      pointsCount = 15;
-      break;
-    case '3M':
-      daysSpan = 90;
-      pointsCount = 18;
-      break;
-    case '6M':
-      daysSpan = 180;
-      pointsCount = 20;
-      break;
-    case '1Y':
-      daysSpan = 365;
-      pointsCount = 24;
-      break;
-    case 'ALL':
-      daysSpan = 500;
-      pointsCount = 28;
-      break;
-  }
-
-  const points: { date: string; valueTRY: number; valueUSD: number; costTRY: number; profitTRY: number }[] = [];
-  const currentValTRY = currentTotals.totalValueTRY;
-  const currentCostTRY = currentTotals.totalCostTRY;
-  const currentValUSD = currentTotals.totalValueUSD;
-
-  // Total gain ratio
-  const gainRatio = currentCostTRY > 0 ? (currentValTRY - currentCostTRY) / currentCostTRY : 0.05;
-
-  for (let i = 0; i < pointsCount; i++) {
-    const fraction = i / (pointsCount - 1); // 0 at oldest past (left), 1 at today (right)
-    const dateOffset = Math.round((1 - fraction) * daysSpan);
-    const pointDate = new Date(now.getTime() - dateOffset * 86400000);
-    const isToday = i === pointsCount - 1;
-    
-    // Natural market wave progression converging smoothly to today's exact valuation
-    const noise = !isToday
-      ? Math.sin((pointsCount - 1 - i) * 0.8) * 0.02 + Math.cos((pointsCount - 1 - i) * 0.35) * 0.015
-      : 0;
-    const progressFactor = Math.pow(fraction, 1.15);
-    const historicalCostTRY = isToday
-      ? currentCostTRY
-      : currentCostTRY * (0.85 + 0.15 * progressFactor);
-    
-    const historicalGain = gainRatio * progressFactor + noise;
-    const valTRY = isToday
-      ? currentValTRY
-      : Math.max(10, historicalCostTRY * (1 + historicalGain));
-    
-    const valUSD = rates.USD_TRY > 0 ? valTRY / rates.USD_TRY : 0;
-    const costTRY = historicalCostTRY;
-
-    const dayStr = isToday
-      ? 'Bugün'
-      : pointDate.toLocaleDateString('tr-TR', {
-          day: 'numeric',
-          month: daysSpan > 90 ? 'short' : 'numeric',
-          year: daysSpan > 365 ? '2-digit' : undefined,
-        });
-
-    points.push({
-      date: dayStr,
-      valueTRY: Math.round(valTRY),
-      valueUSD: Math.round(valUSD),
-      costTRY: Math.round(costTRY),
-      profitTRY: Math.round(valTRY - costTRY),
-    });
-  }
-
-  return points;
 }
 
 /**

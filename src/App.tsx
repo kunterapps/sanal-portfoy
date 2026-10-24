@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { 
   PortfolioAsset, 
+  AssetTransaction,
   ExchangeRates, 
   Currency, 
-  TimeRange 
+  TimeRange,
+  PortfolioSnapshot
 } from './types/portfolio';
 import { Navbar } from './components/Navbar';
 import { ExecutiveSummary } from './components/ExecutiveSummary';
@@ -23,13 +25,22 @@ import {
 import { 
   calculatePortfolioTotals, 
   calculateCategorySummaries, 
-  calculateCurrencySummaries, 
-  generateHistoricalTrend 
+  calculateCurrencySummaries 
 } from './utils/portfolioCalculations';
+import {
+  buildTrendSeries,
+  calculateDailyChange,
+  sanitizeSnapshots,
+  upsertTodaySnapshot,
+} from './utils/snapshots';
 import { triggerDownloadStandaloneHtml } from './utils/standaloneHtmlGenerator';
+import { getCashUnitPrice } from './utils/currency';
+import { applyTransactions, ensureTransactions, TransactionError } from './utils/transactions';
+import { TransactionModal } from './components/TransactionModal';
 
 const STORAGE_KEY = 'my_personal_portfolio_assets';
 const RATES_STORAGE_KEY = 'my_personal_portfolio_rates';
+const SNAPSHOTS_STORAGE_KEY = 'my_personal_portfolio_snapshots';
 
 export default function App() {
   // 1. Assets State (Local-first)
@@ -38,7 +49,8 @@ export default function App() {
       const stored = localStorage.getItem(STORAGE_KEY);
       if (stored) {
         const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed)) return parsed;
+        // Older data has no transaction history; give each asset an opening BUY
+        if (Array.isArray(parsed)) return parsed.map(ensureTransactions);
       }
     } catch (e) {
       console.error('Failed to load portfolio from localStorage', e);
@@ -61,6 +73,15 @@ export default function App() {
     return DEFAULT_EXCHANGE_RATES;
   });
 
+  // 2b. Daily value history (one snapshot per day)
+  const [snapshots, setSnapshots] = useState<PortfolioSnapshot[]>(() => {
+    try {
+      return sanitizeSnapshots(JSON.parse(localStorage.getItem(SNAPSHOTS_STORAGE_KEY) || '[]'));
+    } catch {
+      return [];
+    }
+  });
+
   // 3. UI Configuration States
   const [baseCurrency, setBaseCurrency] = useState<Currency>('TRY');
   const [selectedRange, setSelectedRange] = useState<TimeRange>('1M');
@@ -71,6 +92,8 @@ export default function App() {
   const [isAssetModalOpen, setIsAssetModalOpen] = useState(false);
   const [editingAsset, setEditingAsset] = useState<PortfolioAsset | null>(null);
   const [quickPriceAsset, setQuickPriceAsset] = useState<PortfolioAsset | null>(null);
+  const [transactionAssetId, setTransactionAssetId] = useState<string | null>(null);
+  const transactionAsset = assets.find((a) => a.id === transactionAssetId) ?? null;
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
 
   // Toast Helper
@@ -94,6 +117,12 @@ export default function App() {
     } catch {}
   }, [rates]);
 
+  useEffect(() => {
+    try {
+      localStorage.setItem(SNAPSHOTS_STORAGE_KEY, JSON.stringify(snapshots));
+    } catch {}
+  }, [snapshots]);
+
   // Initial Market Rates Fetch on Mount
   useEffect(() => {
     let mounted = true;
@@ -102,27 +131,15 @@ export default function App() {
         const liveRates = await fetchLiveExchangeRates();
         if (mounted) {
           setRates(liveRates);
-          // Immediately sync cash & gold holdings with live rates
-          setAssets((prevAssets) => {
-            if (!prevAssets || prevAssets.length === 0) return prevAssets;
-            return prevAssets.map((asset) => {
-              if (asset.category === 'CASH') {
-                const sym = (asset.symbol || '').toUpperCase().trim();
-                const isUSD = sym === 'USD' || sym.includes('USD') || sym.includes('DOLAR') || (asset.name || '').toLowerCase().includes('dolar');
-                const isEUR = sym === 'EUR' || sym.includes('EUR') || sym.includes('AVRO') || (asset.name || '').toLowerCase().includes('euro');
-                const isGBP = sym === 'GBP' || sym.includes('GBP') || sym.includes('STERL') || (asset.name || '').toLowerCase().includes('sterlin');
-
-                if (asset.currentCurrency === 'TRY') {
-                  const correctPrice = isUSD ? liveRates.USD_TRY : isEUR ? liveRates.EUR_TRY : isGBP ? liveRates.GBP_TRY : 1;
-                  return { ...asset, currentPrice: correctPrice, lastUpdated: new Date().toISOString() };
-                } else if (asset.currentCurrency === 'USD') {
-                  const correctPrice = isUSD ? 1 : isEUR ? (liveRates.EUR_USD || 1.12) : isGBP ? (liveRates.GBP_USD || 1.34) : (1 / liveRates.USD_TRY);
-                  return { ...asset, currentPrice: correctPrice, lastUpdated: new Date().toISOString() };
-                }
-              }
-              return asset;
-            });
-          });
+          // Immediately sync cash holdings with live rates
+          setAssets((prevAssets) =>
+            prevAssets.map((asset) => {
+              if (asset.category !== 'CASH') return asset;
+              const price = getCashUnitPrice(asset, liveRates);
+              if (price === null || price <= 0) return asset;
+              return { ...asset, currentPrice: price, lastUpdated: new Date().toISOString() };
+            })
+          );
         }
       } catch (err) {
         console.warn('Initial rates fetch failed, using cached/defaults', err);
@@ -149,7 +166,11 @@ export default function App() {
       if (assets.length > 0) {
         const result = await batchUpdatePortfolioPrices(assets, newRates);
         setAssets(result.updatedAssets);
-        showToast(`Piyasalar güncellendi! (${result.updatedCount} varlık güncellendi)`);
+        showToast(
+          result.failedCount > 0
+            ? `${result.updatedCount} varlık güncellendi, ${result.failedCount} varlığın fiyatı alınamadı (son fiyat korunuyor).`
+            : `Piyasalar güncellendi! (${result.updatedCount} varlık güncellendi)`
+        );
       } else {
         showToast('Döviz kurları ve altın fiyatları güncellendi!');
       }
@@ -165,14 +186,27 @@ export default function App() {
   const handleSaveAsset = (assetData: Omit<PortfolioAsset, 'id'>, existingId?: string) => {
     if (existingId) {
       setAssets((prev) =>
-        prev.map((a) => (a.id === existingId ? { ...assetData, id: existingId } : a))
+        prev.map((a) => {
+          if (a.id !== existingId) return a;
+          const updated: PortfolioAsset = { ...a, ...assetData, id: existingId, priceStale: false };
+          const txs = a.transactions ?? [];
+          if (txs.length > 1) {
+            // Quantity and cost are managed by transactions; keep them authoritative
+            return applyTransactions(updated, txs);
+          }
+          // Only the opening entry: editing quantity/cost rewrites it (keeping its date)
+          const opening = txs[0] ?? ensureTransactions({ ...updated, transactions: [] }).transactions![0];
+          return applyTransactions(updated, [
+            { ...opening, type: 'BUY', quantity: assetData.quantity, price: assetData.costPrice },
+          ]);
+        })
       );
       showToast(`${assetData.symbol} başarıyla güncellendi.`);
     } else {
-      const newAsset: PortfolioAsset = {
+      const newAsset: PortfolioAsset = ensureTransactions({
         ...assetData,
-        id: `asset_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
-      };
+        id: `asset_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      });
       setAssets((prev) => [newAsset, ...prev]);
       showToast(`${assetData.symbol} portföye eklendi.`);
     }
@@ -190,12 +224,43 @@ export default function App() {
     }
   };
 
+  // Buy / sell transactions. Returns an error message instead of saving if
+  // the history would become invalid (e.g. selling more than held).
+  const updateTransactions = (
+    assetId: string,
+    change: (txs: AssetTransaction[]) => AssetTransaction[],
+    successMessage: string
+  ): string | null => {
+    const asset = assets.find((a) => a.id === assetId);
+    if (!asset) return 'Varlık bulunamadı.';
+    let updated: PortfolioAsset;
+    try {
+      updated = applyTransactions(asset, change(asset.transactions ?? []));
+    } catch (err) {
+      if (err instanceof TransactionError) return err.message;
+      throw err;
+    }
+    setAssets((prev) => prev.map((a) => (a.id === assetId ? updated : a)));
+    showToast(successMessage);
+    return null;
+  };
+
+  const handleAddTransaction = (assetId: string, tx: AssetTransaction) =>
+    updateTransactions(
+      assetId,
+      (txs) => [...txs, tx],
+      tx.type === 'BUY' ? 'Alış işlemi eklendi.' : 'Satış işlemi eklendi.'
+    );
+
+  const handleDeleteTransaction = (assetId: string, txId: string) =>
+    updateTransactions(assetId, (txs) => txs.filter((t) => t.id !== txId), 'İşlem silindi.');
+
   // Quick Price Override
   const handleSaveQuickPrice = (assetId: string, newPrice: number) => {
     setAssets((prev) =>
       prev.map((a) =>
         a.id === assetId
-          ? { ...a, currentPrice: newPrice, lastUpdated: new Date().toISOString() }
+          ? { ...a, currentPrice: newPrice, lastUpdated: new Date().toISOString(), priceStale: false }
           : a
       )
     );
@@ -213,14 +278,17 @@ export default function App() {
         };
       }
       return asset;
-    });
+    }).map(ensureTransactions);
     setAssets(synced);
+    // Demo values shouldn't mix into a real value history
+    setSnapshots([]);
     showToast('Örnek yatırım varlıkları güncel kurlarla yüklendi!');
   };
 
   // JSON Import
-  const handleImportAssets = (imported: PortfolioAsset[]) => {
+  const handleImportAssets = (imported: PortfolioAsset[], importedSnapshots: PortfolioSnapshot[]) => {
     setAssets(imported);
+    setSnapshots(importedSnapshots);
     showToast(`${imported.length} adet varlık içe aktarıldı!`);
   };
 
@@ -237,9 +305,18 @@ export default function App() {
     return calculateCurrencySummaries(assets, rates);
   }, [assets, rates]);
 
-  const trendData = useMemo(() => {
-    return generateHistoricalTrend(assets, rates, selectedRange);
-  }, [assets, rates, selectedRange]);
+  // Record today's value whenever it changes
+  useEffect(() => {
+    if (assets.length === 0) return;
+    setSnapshots((prev) => upsertTodaySnapshot(prev, totals));
+  }, [assets.length, totals]);
+
+  const dailyChange = useMemo(() => calculateDailyChange(snapshots, totals), [snapshots, totals]);
+
+  const trendData = useMemo(
+    () => buildTrendSeries(snapshots, totals, selectedRange),
+    [snapshots, totals, selectedRange]
+  );
 
   return (
     <div className="min-h-screen bg-[#090d16] text-slate-100 flex flex-col selection:bg-indigo-500 selection:text-white">
@@ -261,7 +338,7 @@ export default function App() {
           setIsAssetModalOpen(true);
         }}
         onOpenExportModal={() => setIsExportModalOpen(true)}
-        onDownloadHtml={() => triggerDownloadStandaloneHtml(assets, rates)}
+        onDownloadHtml={() => triggerDownloadStandaloneHtml(assets, rates, snapshots)}
       />
 
       {/* Main Viewport Container */}
@@ -283,6 +360,7 @@ export default function App() {
             {/* 1. Executive Summary Cards */}
             <ExecutiveSummary
               totals={totals}
+              dailyChange={dailyChange}
               baseCurrency={baseCurrency}
               onToggleCurrency={setBaseCurrency}
               isRefreshing={isRefreshing}
@@ -317,6 +395,7 @@ export default function App() {
                 setIsAssetModalOpen(true);
               }}
               onQuickPriceEdit={(asset) => setQuickPriceAsset(asset)}
+              onOpenTransactions={(asset) => setTransactionAssetId(asset.id)}
               onDeleteAsset={handleDeleteAsset}
             />
           </>
@@ -333,7 +412,7 @@ export default function App() {
           </div>
           <div className="flex items-center gap-4 text-[11px]">
             <button
-              onClick={() => triggerDownloadStandaloneHtml(assets, rates)}
+              onClick={() => triggerDownloadStandaloneHtml(assets, rates, snapshots)}
               className="text-indigo-400 hover:text-indigo-300 transition-colors"
             >
               GitHub Pages HTML İndir
@@ -363,6 +442,14 @@ export default function App() {
         rates={rates}
       />
 
+      <TransactionModal
+        asset={transactionAsset}
+        rates={rates}
+        onClose={() => setTransactionAssetId(null)}
+        onAddTransaction={handleAddTransaction}
+        onDeleteTransaction={handleDeleteTransaction}
+      />
+
       <QuickPriceModal
         isOpen={quickPriceAsset !== null}
         asset={quickPriceAsset}
@@ -375,6 +462,7 @@ export default function App() {
         onClose={() => setIsExportModalOpen(false)}
         assets={assets}
         rates={rates}
+        snapshots={snapshots}
         onImportAssets={handleImportAssets}
       />
     </div>

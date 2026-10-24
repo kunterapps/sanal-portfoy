@@ -7,7 +7,9 @@ import {
   DollarSign, 
   ExternalLink,
   ChevronUp,
-  ChevronDown
+  ChevronDown,
+  AlertTriangle,
+  ArrowLeftRight
 } from 'lucide-react';
 import { PortfolioAsset, AssetCategory, Currency, ExchangeRates } from '../types/portfolio';
 import { 
@@ -18,6 +20,7 @@ import {
   CATEGORY_METADATA 
 } from '../utils/portfolioCalculations';
 import { getGoldDisplayDetails } from '../utils/goldCalculations';
+import { isClosedPosition } from '../utils/transactions';
 
 interface AssetTableProps {
   assets: PortfolioAsset[];
@@ -25,6 +28,7 @@ interface AssetTableProps {
   baseCurrency: Currency;
   onEditAsset: (asset: PortfolioAsset) => void;
   onQuickPriceEdit: (asset: PortfolioAsset) => void;
+  onOpenTransactions: (asset: PortfolioAsset) => void;
   onDeleteAsset: (id: string) => void;
 }
 
@@ -37,6 +41,7 @@ export const AssetTable: React.FC<AssetTableProps> = ({
   baseCurrency,
   onEditAsset,
   onQuickPriceEdit,
+  onOpenTransactions,
   onDeleteAsset,
 }) => {
   const [activeTab, setActiveTab] = useState<string>('ALL');
@@ -266,7 +271,7 @@ export const AssetTable: React.FC<AssetTableProps> = ({
                 return (
                   <tr
                     key={asset.id}
-                    className="hover:bg-slate-850/50 transition-colors group"
+                    className={`hover:bg-slate-850/50 transition-colors group ${isClosedPosition(asset) ? 'opacity-60' : ''}`}
                   >
                     {/* Symbol & Name */}
                     <td className="py-3.5 px-4">
@@ -280,6 +285,11 @@ export const AssetTable: React.FC<AssetTableProps> = ({
                             <span className="font-bold text-slate-100 font-mono tracking-tight text-sm">
                               {asset.symbol}
                             </span>
+                            {isClosedPosition(asset) && (
+                              <span className="text-[10px] px-1.5 rounded bg-slate-800 text-slate-300 border border-slate-700 font-sans">
+                                Kapandı
+                              </span>
+                            )}
                             {isGold && (
                               <span className="text-[10px] px-1.5 py-0.2 rounded bg-amber-950/40 text-amber-300 border border-amber-900/40 font-mono">
                                 {goldDetails?.shortName}
@@ -316,6 +326,15 @@ export const AssetTable: React.FC<AssetTableProps> = ({
                       <div className="font-bold text-white">
                         {formatCurrency(asset.currentPrice, asset.currentCurrency, 2)}
                       </div>
+                      {asset.priceStale && (
+                        <div
+                          className="inline-flex items-center gap-1 text-[10px] text-amber-400"
+                          title={`Son güncellemede canlı fiyat alınamadı. Gösterilen fiyat: ${new Date(asset.lastUpdated).toLocaleString('tr-TR')}`}
+                        >
+                          <AlertTriangle className="w-3 h-3" />
+                          Eski fiyat
+                        </div>
+                      )}
                       <button
                         onClick={() => onQuickPriceEdit(asset)}
                         title="Fiyatı elle güncelle"
@@ -359,11 +378,27 @@ export const AssetTable: React.FC<AssetTableProps> = ({
                       <div className={`text-[11px] font-semibold ${isPositive ? 'text-emerald-400' : 'text-rose-400'}`}>
                         {formatPercent(asset.pl.profitPercent)}
                       </div>
+                      {!!asset.realizedProfit && (
+                        <div
+                          className={`text-[10px] ${asset.realizedProfit > 0 ? 'text-emerald-500/80' : 'text-rose-500/80'}`}
+                          title="Satışlardan gerçekleşen kâr/zarar"
+                        >
+                          Gerç.: {asset.realizedProfit > 0 ? '+' : '-'}
+                          {formatCurrency(Math.abs(asset.realizedProfit), asset.costCurrency, 0)}
+                        </div>
+                      )}
                     </td>
 
                     {/* Actions */}
                     <td className="py-3.5 px-4 text-center">
                       <div className="flex items-center justify-center gap-1 opacity-80 group-hover:opacity-100 transition-opacity">
+                        <button
+                          onClick={() => onOpenTransactions(asset)}
+                          title="Alış / Satış İşlemleri"
+                          className="p-1.5 text-emerald-400 hover:text-emerald-300 bg-emerald-950/20 hover:bg-emerald-950/50 rounded-lg transition-colors"
+                        >
+                          <ArrowLeftRight className="w-3.5 h-3.5" />
+                        </button>
                         <button
                           onClick={() => onEditAsset(asset)}
                           title="Varlığı Düzenle"

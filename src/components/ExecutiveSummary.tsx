@@ -2,6 +2,7 @@ import React from 'react';
 import { TrendingUp, TrendingDown, DollarSign, RefreshCw, Calendar } from 'lucide-react';
 import { Currency } from '../types/portfolio';
 import { formatCurrency, formatPercent } from '../utils/portfolioCalculations';
+import { DailyChange } from '../utils/snapshots';
 
 interface ExecutiveSummaryProps {
   totals: {
@@ -12,11 +13,11 @@ interface ExecutiveSummaryProps {
     totalProfitTRY: number;
     totalProfitUSD: number;
     totalProfitPercent: number;
-    dailyChangeTRY: number;
-    dailyChangeUSD: number;
-    dailyChangePercent: number;
+    realizedProfitTRY: number;
+    realizedProfitUSD: number;
     assetCount: number;
   };
+  dailyChange: DailyChange | null;
   baseCurrency: Currency;
   onToggleCurrency: (c: Currency) => void;
   isRefreshing: boolean;
@@ -26,6 +27,7 @@ interface ExecutiveSummaryProps {
 
 export const ExecutiveSummary: React.FC<ExecutiveSummaryProps> = ({
   totals,
+  dailyChange,
   baseCurrency,
   onToggleCurrency,
   isRefreshing,
@@ -33,14 +35,26 @@ export const ExecutiveSummary: React.FC<ExecutiveSummaryProps> = ({
   lastUpdated,
 }) => {
   const isProfit = totals.totalProfitTRY >= 0;
-  const isDailyPositive = totals.dailyChangeTRY >= 0;
+  const isDailyPositive = (dailyChange?.changeTRY ?? 0) >= 0;
 
   const displayValue = baseCurrency === 'TRY' ? totals.totalValueTRY : totals.totalValueUSD;
   const secondaryValue = baseCurrency === 'TRY' ? totals.totalValueUSD : totals.totalValueTRY;
   const secondaryCurrency: Currency = baseCurrency === 'TRY' ? 'USD' : 'TRY';
 
   const displayProfit = baseCurrency === 'TRY' ? totals.totalProfitTRY : totals.totalProfitUSD;
-  const displayDaily = baseCurrency === 'TRY' ? totals.dailyChangeTRY : totals.dailyChangeUSD;
+  const displayRealized = baseCurrency === 'TRY' ? totals.realizedProfitTRY : totals.realizedProfitUSD;
+  const displayDaily = dailyChange
+    ? baseCurrency === 'TRY'
+      ? dailyChange.changeTRY
+      : dailyChange.changeUSD
+    : 0;
+  const dailyColor = isDailyPositive ? 'text-emerald-400' : 'text-rose-400';
+  const sinceLabel = dailyChange
+    ? (() => {
+        const [y, m, d] = dailyChange.sinceDate.split('-').map(Number);
+        return new Date(y, m - 1, d).toLocaleDateString('tr-TR', { day: 'numeric', month: 'long' });
+      })()
+    : null;
 
   const timeFormatted = lastUpdated 
     ? new Date(lastUpdated).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })
@@ -95,7 +109,7 @@ export const ExecutiveSummary: React.FC<ExecutiveSummaryProps> = ({
       <div className="bg-[#0f172a] border border-slate-800 rounded-2xl p-5 flex flex-col justify-between">
         <div>
           <div className="flex items-center justify-between text-xs text-slate-400 font-medium mb-2.5">
-            <span>Toplam Net Kâr / Zarar</span>
+            <span>Açık Pozisyon Kâr / Zarar</span>
             <span className={`inline-flex items-center gap-1 text-[11px] font-semibold font-mono ${
               isProfit ? 'text-emerald-400' : 'text-rose-400'
             }`}>
@@ -107,15 +121,23 @@ export const ExecutiveSummary: React.FC<ExecutiveSummaryProps> = ({
           <div className={`text-2xl sm:text-3xl font-extrabold font-mono tracking-tight tabular-nums ${
             isProfit ? 'text-emerald-400' : 'text-rose-400'
           }`}>
-            {isProfit ? '+' : ''}{formatCurrency(displayProfit, baseCurrency, 2)}
+            {isProfit ? '+' : '-'}{formatCurrency(Math.abs(displayProfit), baseCurrency, 2)}
           </div>
         </div>
 
-        <div className="text-xs text-slate-500 font-mono mt-3 pt-2.5 border-t border-slate-800/80 flex items-center justify-between">
-          <span>Toplam Yatırılan Maliyet:</span>
-          <span className="text-slate-300 font-medium tabular-nums">
-            {formatCurrency(baseCurrency === 'TRY' ? totals.totalCostTRY : totals.totalCostUSD, baseCurrency, 2)}
-          </span>
+        <div className="text-xs text-slate-500 font-mono mt-3 pt-2.5 border-t border-slate-800/80 space-y-1">
+          <div className="flex items-center justify-between">
+            <span>Toplam Yatırılan Maliyet:</span>
+            <span className="text-slate-300 font-medium tabular-nums">
+              {formatCurrency(baseCurrency === 'TRY' ? totals.totalCostTRY : totals.totalCostUSD, baseCurrency, 2)}
+            </span>
+          </div>
+          <div className="flex items-center justify-between" title="Satışlardan gerçekleşen kâr/zarar (bugünkü kurla)">
+            <span>Gerçekleşmiş K/Z:</span>
+            <span className={`font-medium tabular-nums ${displayRealized >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+              {displayRealized >= 0 ? '+' : '-'}{formatCurrency(Math.abs(displayRealized), baseCurrency, 2)}
+            </span>
+          </div>
         </div>
       </div>
 
@@ -123,20 +145,28 @@ export const ExecutiveSummary: React.FC<ExecutiveSummaryProps> = ({
       <div className="bg-[#0f172a] border border-slate-800 rounded-2xl p-5 flex flex-col justify-between">
         <div>
           <div className="flex items-center justify-between text-xs text-slate-400 font-medium mb-2.5">
-            <span>Günlük Tahmini Değişim (24s)</span>
-            <span className="text-[11px] font-semibold text-emerald-400 font-mono">
-              +{totals.dailyChangePercent}%
-            </span>
+            <span>Son Kayıttan Bu Yana Değişim</span>
+            {dailyChange && (
+              <span className={`text-[11px] font-semibold font-mono ${dailyColor}`}>
+                {formatPercent(dailyChange.percent)}
+              </span>
+            )}
           </div>
 
-          <div className="text-2xl sm:text-3xl font-extrabold font-mono tracking-tight text-emerald-400 tabular-nums">
-            +{formatCurrency(displayDaily, baseCurrency, 2)}
-          </div>
+          {dailyChange ? (
+            <div className={`text-2xl sm:text-3xl font-extrabold font-mono tracking-tight tabular-nums ${dailyColor}`}>
+              {isDailyPositive ? '+' : '-'}{formatCurrency(Math.abs(displayDaily), baseCurrency, 2)}
+            </div>
+          ) : (
+            <div className="text-sm text-slate-400 leading-snug">
+              Henüz önceki güne ait kayıt yok. Değişim yarından itibaren burada görünecek.
+            </div>
+          )}
         </div>
 
         <div className="text-xs text-slate-500 font-mono mt-3 pt-2.5 border-t border-slate-800/80 flex items-center justify-between">
-          <span>Piyasa Dinamiği:</span>
-          <span className="text-slate-400">Canlı Değerleme</span>
+          <span>Karşılaştırma:</span>
+          <span className="text-slate-400">{sinceLabel ?? 'Bugün ilk kayıt'}</span>
         </div>
       </div>
 

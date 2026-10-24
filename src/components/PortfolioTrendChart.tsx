@@ -1,14 +1,7 @@
 import React, { useState } from 'react';
 import { TimeRange, Currency } from '../types/portfolio';
 import { formatCurrency, formatPercent } from '../utils/portfolioCalculations';
-
-interface TrendPoint {
-  date: string;
-  valueTRY: number;
-  valueUSD: number;
-  costTRY: number;
-  profitTRY: number;
-}
+import { TrendPoint } from '../utils/snapshots';
 
 interface PortfolioTrendChartProps {
   data: TrendPoint[];
@@ -36,6 +29,45 @@ export const PortfolioTrendChart: React.FC<PortfolioTrendChartProps> = ({
     { key: 'ALL', label: 'TÜMÜ' },
   ];
 
+  const rangeButtons = (
+    <div className="flex items-center gap-1 bg-slate-900/90 p-1 rounded-xl border border-slate-800 self-start sm:self-auto">
+      {ranges.map((r) => (
+        <button
+          key={r.key}
+          type="button"
+          onClick={() => onRangeChange(r.key)}
+          className={`px-3 py-1 text-xs font-semibold rounded-lg transition-colors ${
+            selectedRange === r.key
+              ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-600/30'
+              : 'text-slate-400 hover:text-slate-200'
+          }`}
+        >
+          {r.label}
+        </button>
+      ))}
+    </div>
+  );
+
+  if (hasAssets && data.length < 2) {
+    return (
+      <div className="bg-[#0f172a] border border-slate-800 rounded-2xl p-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
+          <h2 className="text-base font-bold text-white tracking-tight">Zaman İçinde Değer Değişimi</h2>
+          {rangeButtons}
+        </div>
+        <div className="text-center py-10">
+          <div className="w-12 h-12 mx-auto rounded-full bg-slate-900 border border-slate-800 flex items-center justify-center text-slate-500 mb-3">
+            📈
+          </div>
+          <p className="text-xs text-slate-400 max-w-md mx-auto">
+            Grafik, portföyünüzün her gün otomatik kaydedilen gerçek değeriyle oluşur. Bu aralıkta henüz önceki
+            günlere ait kayıt yok; uygulamayı farklı günlerde açtıkça eğri burada belirecek.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   if (!hasAssets || data.length === 0) {
     return (
       <div className="bg-[#0f172a] border border-slate-800 rounded-2xl p-6 text-center py-14">
@@ -57,7 +89,7 @@ export const PortfolioTrendChart: React.FC<PortfolioTrendChartProps> = ({
   const paddingY = 30;
 
   const values = data.map((d) => (baseCurrency === 'TRY' ? d.valueTRY : d.valueUSD));
-  const costs = data.map((d) => (baseCurrency === 'TRY' ? d.costTRY : d.costTRY / 38.65));
+  const costs = data.map((d) => (baseCurrency === 'TRY' ? d.costTRY : d.costUSD));
 
   const allNumbers = [...values, ...costs];
   const minVal = Math.min(...allNumbers) * 0.96;
@@ -80,7 +112,7 @@ export const PortfolioTrendChart: React.FC<PortfolioTrendChartProps> = ({
 
   const costPoints = data.map((d, i) => ({
     x: getX(i),
-    y: getY(baseCurrency === 'TRY' ? d.costTRY : d.costTRY / 38.65),
+    y: getY(baseCurrency === 'TRY' ? d.costTRY : d.costUSD),
   }));
 
   const buildPath = (pts: { x: number; y: number }[]) => {
@@ -111,7 +143,7 @@ export const PortfolioTrendChart: React.FC<PortfolioTrendChartProps> = ({
 
   const activePoint = hoverIndex !== null ? data[hoverIndex] : data[data.length - 1];
   const activeVal = baseCurrency === 'TRY' ? activePoint.valueTRY : activePoint.valueUSD;
-  const activeCost = baseCurrency === 'TRY' ? activePoint.costTRY : activePoint.costTRY / 38.65;
+  const activeCost = baseCurrency === 'TRY' ? activePoint.costTRY : activePoint.costUSD;
   const activeProfit = activeVal - activeCost;
   const activeProfitPercent = activeCost > 0 ? (activeProfit / activeCost) * 100 : 0;
 
@@ -127,27 +159,11 @@ export const PortfolioTrendChart: React.FC<PortfolioTrendChartProps> = ({
             </span>
           </div>
           <p className="text-xs text-slate-400 mt-0.5">
-            Portföyün toplam piyasa değeri ve yatırım maliyetinin geçmiş performansı
+            Her gün kaydedilen portföy değeri ve yatırım maliyeti
           </p>
         </div>
 
-        {/* Range Buttons */}
-        <div className="flex items-center gap-1 bg-slate-900/90 p-1 rounded-xl border border-slate-800 self-start sm:self-auto">
-          {ranges.map((r) => (
-            <button
-              key={r.key}
-              type="button"
-              onClick={() => onRangeChange(r.key)}
-              className={`px-3 py-1 text-xs font-semibold rounded-lg transition-colors ${
-                selectedRange === r.key
-                  ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-600/30'
-                  : 'text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              {r.label}
-            </button>
-          ))}
-        </div>
+        {rangeButtons}
       </div>
 
       {/* Active Hover / Current Stats Callout */}

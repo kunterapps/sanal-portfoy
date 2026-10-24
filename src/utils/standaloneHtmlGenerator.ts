@@ -1,4 +1,17 @@
-import { PortfolioAsset, ExchangeRates } from '../types/portfolio';
+import { PortfolioAsset, ExchangeRates, PortfolioSnapshot } from '../types/portfolio';
+
+/**
+ * JSON.stringify for embedding inside an inline <script>. Escapes characters
+ * that could close the script tag (e.g. an asset note containing "</script>").
+ */
+export function toInlineScriptJson(value: unknown): string {
+  return JSON.stringify(value, null, 2)
+    .replace(/</g, '\\u003c')
+    .replace(/>/g, '\\u003e')
+    .replace(/&/g, '\\u0026')
+    .replace(/\u2028/g, '\\u2028')
+    .replace(/\u2029/g, '\\u2029');
+}
 
 /**
  * Generates a complete, single-file HTML application containing Tailwind CDN,
@@ -6,9 +19,14 @@ import { PortfolioAsset, ExchangeRates } from '../types/portfolio';
  * This file runs 100% standalone and can be directly committed as index.html
  * to GitHub Pages.
  */
-export function generateStandaloneHtml(assets: PortfolioAsset[], rates: ExchangeRates): string {
-  const assetsJson = JSON.stringify(assets, null, 2);
-  const ratesJson = JSON.stringify(rates, null, 2);
+export function generateStandaloneHtml(
+  assets: PortfolioAsset[],
+  rates: ExchangeRates,
+  snapshots: PortfolioSnapshot[] = []
+): string {
+  const assetsJson = toInlineScriptJson(assets);
+  const ratesJson = toInlineScriptJson(rates);
+  const snapshotsJson = toInlineScriptJson(snapshots);
 
   return `<!DOCTYPE html>
 <html lang="tr">
@@ -24,9 +42,9 @@ export function generateStandaloneHtml(assets: PortfolioAsset[], rates: Exchange
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <!-- Vue.js 3 CDN -->
-  <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+  <script src="https://unpkg.com/vue@3.5.13/dist/vue.global.prod.js"></script>
   <!-- Chart.js CDN -->
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
   <script>
     tailwind.config = {
       darkMode: 'class',
@@ -120,13 +138,16 @@ export function generateStandaloneHtml(assets: PortfolioAsset[], rates: Exchange
 
         <!-- Günlük Değişim -->
         <div class="bg-[#0f172a] border border-slate-800 rounded-xl p-5">
-          <div class="text-xs text-slate-400 font-medium mb-2">Günlük Değişim (24s)</div>
-          <div class="text-2xl font-bold font-mono tracking-tight text-emerald-400 tabular-nums">
-            +{{ baseCurrency === 'TRY' ? '₺' + formatMoney(totals.dailyChangeTRY) : '$' + formatMoney(totals.dailyChangeUSD) }}
-          </div>
-          <div class="text-xs text-emerald-400 font-mono font-medium mt-1">
-            +0.84% Bugün
-          </div>
+          <div class="text-xs text-slate-400 font-medium mb-2">Son Kayıttan Bu Yana Değişim</div>
+          <template v-if="dailyChange">
+            <div :class="dailyChange.changeTRY >= 0 ? 'text-emerald-400' : 'text-rose-400'" class="text-2xl font-bold font-mono tracking-tight tabular-nums">
+              {{ dailyChange.changeTRY >= 0 ? '+' : '-' }}{{ baseCurrency === 'TRY' ? '₺' + formatMoney(Math.abs(dailyChange.changeTRY)) : '$' + formatMoney(Math.abs(dailyChange.changeUSD)) }}
+            </div>
+            <div :class="dailyChange.changeTRY >= 0 ? 'text-emerald-400' : 'text-rose-400'" class="text-xs font-mono font-medium mt-1">
+              {{ (dailyChange.percent >= 0 ? '+' : '') + dailyChange.percent.toFixed(2) }}% ({{ dailyChange.sinceDate }} kaydına göre)
+            </div>
+          </template>
+          <div v-else class="text-sm text-slate-400">Henüz önceki güne ait kayıt yok.</div>
         </div>
 
         <!-- Varlık Sayısı & Yenile -->
@@ -378,10 +399,11 @@ export function generateStandaloneHtml(assets: PortfolioAsset[], rates: Exchange
 
   <!-- APPLICATION VUE SCRIPT -->
   <script>
-    const { createApp, ref, computed, onMounted, nextTick } = Vue;
+    const { createApp, ref, computed, onMounted, nextTick, watch } = Vue;
 
     const initialAssets = ${assetsJson};
     const initialRates = ${ratesJson};
+    const initialSnapshots = ${snapshotsJson};
 
     createApp({
       setup() {
@@ -474,15 +496,61 @@ export function generateStandaloneHtml(assets: PortfolioAsset[], rates: Exchange
           const totalProfitUSD = rates.value.USD_TRY > 0 ? totalProfitTRY / rates.value.USD_TRY : 0;
           const totalProfitPercent = totalCostTRY > 0 ? (totalProfitTRY / totalCostTRY) * 100 : 0;
           const totalValueUSD = rates.value.USD_TRY > 0 ? totalValueTRY / rates.value.USD_TRY : 0;
+          const totalCostUSD = rates.value.USD_TRY > 0 ? totalCostTRY / rates.value.USD_TRY : 0;
 
           return {
             totalValueTRY,
             totalValueUSD,
+            totalCostTRY,
+            totalCostUSD,
             totalProfitTRY,
             totalProfitUSD,
-            totalProfitPercent,
-            dailyChangeTRY: totalValueTRY * 0.0084,
-            dailyChangeUSD: totalValueUSD * 0.0084
+            totalProfitPercent
+          };
+        });
+
+        // Daily value history: one snapshot per local day, last value of the day wins
+        const snapshots = ref(JSON.parse(localStorage.getItem('my_portfolio_snapshots') || 'null') || initialSnapshots);
+
+        function dayKey(d) {
+          return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+        }
+
+        function recordSnapshot() {
+          if (!assets.value.length) return;
+          const today = dayKey(new Date());
+          const t = totals.value;
+          const snap = {
+            date: today,
+            timestamp: Date.now(),
+            totalValueTRY: t.totalValueTRY,
+            totalValueUSD: t.totalValueUSD,
+            totalCostTRY: t.totalCostTRY,
+            totalCostUSD: t.totalCostUSD
+          };
+          snapshots.value = snapshots.value
+            .filter(s => s.date !== today)
+            .concat(snap)
+            .sort((a, b) => a.date.localeCompare(b.date))
+            .slice(-3650);
+          localStorage.setItem('my_portfolio_snapshots', JSON.stringify(snapshots.value));
+        }
+
+        watch(totals, recordSnapshot, { immediate: true });
+
+        // Measured on profit (value − cost) so adding assets isn't counted as a gain
+        const dailyChange = computed(() => {
+          const today = dayKey(new Date());
+          const prev = snapshots.value.slice().reverse().find(s => s.date < today);
+          if (!prev) return null;
+          const t = totals.value;
+          const changeTRY = (t.totalValueTRY - t.totalCostTRY) - (prev.totalValueTRY - prev.totalCostTRY);
+          const changeUSD = (t.totalValueUSD - t.totalCostUSD) - (prev.totalValueUSD - prev.totalCostUSD);
+          return {
+            changeTRY,
+            changeUSD,
+            percent: prev.totalValueTRY > 0 ? (changeTRY / prev.totalValueTRY) * 100 : 0,
+            sinceDate: prev.date
           };
         });
 
@@ -672,7 +740,8 @@ export function generateStandaloneHtml(assets: PortfolioAsset[], rates: Exchange
             // 3. Update all gold/commodity & cash holdings with live prices
             assets.value.forEach(a => {
               if (a.category === 'COMMODITY' && a.goldType) {
-                a.currentPrice = getGoldPrice(a.goldType);
+                // getGoldPrice is TRY-based; convert for e.g. USD-held Ons Altın
+                a.currentPrice = getGoldPrice(a.goldType) / (convertToTRY(1, a.currentCurrency) || 1);
                 a.lastUpdated = new Date().toISOString();
               } else if (a.category === 'CASH') {
                 const sym = (a.symbol || '').toUpperCase().trim();
@@ -719,23 +788,14 @@ export function generateStandaloneHtml(assets: PortfolioAsset[], rates: Exchange
           if (!ctx) return;
           if (trendChartInstance) trendChartInstance.destroy();
 
-          const count = 12;
-          const labels = [];
-          const values = [];
-          const costs = [];
-          const totalVal = totals.value.totalValueTRY;
-          const totalCost = assets.value.reduce((acc, a) => acc + convertToTRY(a.quantity * a.costPrice, a.costCurrency), 0);
-
-          for (let i = 0; i < count; i++) {
-            const isToday = i === count - 1;
-            const daysAgo = count - 1 - i;
-            labels.push(isToday ? 'Bugün' : daysAgo + 'g önce');
-            const ratio = i / (count - 1);
-            const val = isToday ? totalVal : totalCost * (0.88 + 0.12 * ratio) * (1 + (totalVal > totalCost ? 0.15 * ratio : -0.05 * ratio));
-            const cost = isToday ? totalCost : totalCost * (0.9 + 0.1 * ratio);
-            values.push(Math.round(val));
-            costs.push(Math.round(cost));
-          }
+          // Real recorded daily values within the selected range, plus today's live value
+          const rangeDays = { '1W': 7, '1M': 30, '3M': 90, '6M': 180, '1Y': 365, 'ALL': null }[selectedRange.value];
+          const today = dayKey(new Date());
+          const from = rangeDays === null ? '' : dayKey(new Date(Date.now() - rangeDays * 86400000));
+          const past = snapshots.value.filter(s => s.date < today && s.date >= from);
+          const labels = past.map(s => s.date.slice(5).split('-').reverse().join('.')).concat('Bugün');
+          const values = past.map(s => Math.round(s.totalValueTRY)).concat(Math.round(totals.value.totalValueTRY));
+          const costs = past.map(s => Math.round(s.totalCostTRY)).concat(Math.round(totals.value.totalCostTRY));
 
           trendChartInstance = new Chart(ctx, {
             type: 'line',
@@ -892,6 +952,7 @@ export function generateStandaloneHtml(assets: PortfolioAsset[], rates: Exchange
           selectedRange,
           filteredAssets,
           totals,
+          dailyChange,
           currencyBreakdown,
           showModal,
           isEditing,
@@ -926,8 +987,12 @@ export function generateStandaloneHtml(assets: PortfolioAsset[], rates: Exchange
 /**
  * Triggers download of the standalone HTML file in the browser
  */
-export function triggerDownloadStandaloneHtml(assets: PortfolioAsset[], rates: ExchangeRates) {
-  const htmlContent = generateStandaloneHtml(assets, rates);
+export function triggerDownloadStandaloneHtml(
+  assets: PortfolioAsset[],
+  rates: ExchangeRates,
+  snapshots: PortfolioSnapshot[] = []
+) {
+  const htmlContent = generateStandaloneHtml(assets, rates, snapshots);
   const blob = new Blob([htmlContent], { type: 'text/html;charset=utf-8' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');

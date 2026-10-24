@@ -1,5 +1,6 @@
 import { ExchangeRates, PortfolioAsset } from '../types/portfolio';
 import { calculateGoldUnitPrice } from '../utils/goldCalculations';
+import { crossRate, getCashUnitPrice } from '../utils/currency';
 
 // Robust helper to parse Turkish currency and number strings (e.g. "6.384,76", "$3.996,40", "49,7746")
 export function parseTurkishNumber(val: unknown): number {
@@ -26,23 +27,6 @@ export const DEFAULT_EXCHANGE_RATES: ExchangeRates = {
   ATA_GOLD_TRY: 43484,
   BILEZIK_22_TRY: 5890,
   lastUpdated: new Date().toISOString(),
-};
-
-// Curated reference database for popular TEFAS / BEFAS funds for instant offline resilience
-const POPULAR_FUNDS_CACHE: Record<string, { name: string; price: number; type: 'TEFAS' | 'BEFAS' }> = {
-  TCD: { name: 'Tacirler Portföy Değişken Fon', price: 14.85, type: 'TEFAS' },
-  MAC: { name: 'Marmara Capital Portföy Hisse Senedi Fonu', price: 0.892, type: 'TEFAS' },
-  TI2: { name: 'İş Portföy İki Numaralı Değişken Fon', price: 12.45, type: 'TEFAS' },
-  TFF: { name: 'TEB Portföy Altın Fonu', price: 0.162, type: 'TEFAS' },
-  KZL: { name: 'Kuveyt Türk Portföy Altın Katılım Fonu', price: 0.054, type: 'TEFAS' },
-  IPB: { name: 'İstanbul Portföy Birinci Değişken Fon', price: 3.24, type: 'TEFAS' },
-  IIH: { name: 'İstanbul Portföy Üçüncü Hisse Senedi Fonu', price: 0.445, type: 'TEFAS' },
-  AEA: { name: 'Anadolu Hayat Emeklilik Altın Katılım Emeklilik Fonu', price: 0.285, type: 'BEFAS' },
-  BGL: { name: 'Anadolu Hayat Emeklilik Altın Emeklilik Fonu', price: 0.278, type: 'BEFAS' },
-  CHG: { name: 'Garanti Emeklilik Hisse Senedi Emeklilik Fonu', price: 0.512, type: 'BEFAS' },
-  BGP: { name: 'Bereket Emeklilik Katılım Hisse Fonu', price: 0.142, type: 'BEFAS' },
-  VEB: { name: 'Vakıf Emeklilik BIST 30 Endeks Fonu', price: 0.395, type: 'BEFAS' },
-  AHL: { name: 'Anadolu Hayat Dengeli Değişken Grup Emeklilik Fonu', price: 0.418, type: 'BEFAS' },
 };
 
 /**
@@ -254,44 +238,15 @@ export async function fetchLivePriceForAsset(
         rates
       );
       if (unitPrice > 0) {
-        return { price: unitPrice, success: true };
+        // calculateGoldUnitPrice is TRY-based; e.g. Ons Altın is usually held in USD
+        return { price: unitPrice * crossRate('TRY', asset.currentCurrency, rates), success: true };
       }
     }
 
     // 2. Cash Currencies (USD, EUR, GBP, TRY)
     if (asset.category === 'CASH') {
-      const sym = (asset.symbol || '').toUpperCase().trim();
-      const curr = asset.currentCurrency;
-
-      const isUSD = sym === 'USD' || sym.includes('USD') || sym.includes('DOLAR') || (asset.name || '').toLowerCase().includes('dolar');
-      const isEUR = sym === 'EUR' || sym.includes('EUR') || sym.includes('AVRO') || (asset.name || '').toLowerCase().includes('euro');
-      const isGBP = sym === 'GBP' || sym.includes('GBP') || sym.includes('STERL') || (asset.name || '').toLowerCase().includes('sterlin');
-      const isTRY = sym === 'TRY' || sym === 'TL' || sym.includes('TRY') || sym.includes('TL') || (asset.name || '').toLowerCase().includes('lira');
-
-      if (isUSD) {
-        if (curr === 'TRY') return { price: rates.USD_TRY, success: true };
-        if (curr === 'USD') return { price: 1, success: true };
-        if (curr === 'EUR') return { price: 1 / (rates.EUR_USD || 1.12), success: true };
-        if (curr === 'GBP') return { price: 1 / (rates.GBP_USD || 1.34), success: true };
-      } else if (isEUR) {
-        if (curr === 'TRY') return { price: rates.EUR_TRY, success: true };
-        if (curr === 'EUR') return { price: 1, success: true };
-        if (curr === 'USD') return { price: rates.EUR_USD || 1.12, success: true };
-        if (curr === 'GBP') return { price: (rates.EUR_TRY / rates.GBP_TRY) || 0.84, success: true };
-      } else if (isGBP) {
-        if (curr === 'TRY') return { price: rates.GBP_TRY, success: true };
-        if (curr === 'GBP') return { price: 1, success: true };
-        if (curr === 'USD') return { price: rates.GBP_USD || 1.34, success: true };
-        if (curr === 'EUR') return { price: (rates.GBP_TRY / rates.EUR_TRY) || 1.19, success: true };
-      } else if (isTRY) {
-        if (curr === 'TRY') return { price: 1, success: true };
-        if (curr === 'USD') return { price: 1 / (rates.USD_TRY || 49.75), success: true };
-        if (curr === 'EUR') return { price: 1 / (rates.EUR_TRY || 55.80), success: true };
-        if (curr === 'GBP') return { price: 1 / (rates.GBP_TRY || 66.65), success: true };
-      }
-
-      // Default fallback
-      return { price: curr === 'TRY' ? (isUSD ? rates.USD_TRY : 1) : 1, success: true };
+      const price = getCashUnitPrice(asset, rates);
+      if (price !== null && price > 0) return { price, success: true };
     }
 
     // 3. BIST Stocks (THYAO -> THYAO.IS)
@@ -346,11 +301,6 @@ export async function fetchLivePriceForAsset(
           // Continue to next live candidate
         }
       }
-
-      // 5.2 If live endpoints fail (due to weekend/network), check cached database
-      if (POPULAR_FUNDS_CACHE[fundCode]) {
-        return { price: POPULAR_FUNDS_CACHE[fundCode].price, success: true };
-      }
     }
 
     // 6. Cryptocurrencies (BTC, ETH, SOL, AVAX, etc.)
@@ -371,8 +321,7 @@ export async function fetchLivePriceForAsset(
           const data = await res.json();
           const p = parseFloat(data.price);
           if (!isNaN(p) && p > 0) {
-            // If asset currency is TRY, convert to TRY
-            const finalPrice = asset.currentCurrency === 'TRY' ? p * rates.USD_TRY : p;
+            const finalPrice = p * crossRate('USD', asset.currentCurrency, rates);
             return { price: finalPrice, success: true };
           }
         }
@@ -383,7 +332,7 @@ export async function fetchLivePriceForAsset(
       // 6.2 Yahoo Finance fallback (BTC-USD, ETH-USD)
       const yahooPrice = await fetchYahooQuote(`${sym}-USD`);
       if (yahooPrice !== null && yahooPrice > 0) {
-        const finalPrice = asset.currentCurrency === 'TRY' ? yahooPrice * rates.USD_TRY : yahooPrice;
+        const finalPrice = yahooPrice * crossRate('USD', asset.currentCurrency, rates);
         return { price: finalPrice, success: true };
       }
     }
@@ -407,22 +356,20 @@ export async function batchUpdatePortfolioPrices(
 
   const promises = assets.map(async (asset) => {
     const result = await fetchLivePriceForAsset(asset, rates);
-    if (result.success && Math.abs(result.price - asset.currentPrice) > 0.0001) {
-      updatedCount++;
-      return {
-        ...asset,
-        currentPrice: Math.round(result.price * 10000) / 10000,
-        lastUpdated: new Date().toISOString(),
-      };
-    } else if (result.success) {
-      return {
-        ...asset,
-        lastUpdated: new Date().toISOString(),
-      };
-    } else {
+    if (!result.success) {
       failedCount++;
-      return asset;
+      // Keep the last known price but flag it so the UI can show it's outdated
+      return { ...asset, priceStale: true };
     }
+    if (Math.abs(result.price - asset.currentPrice) > 0.0001) {
+      updatedCount++;
+    }
+    return {
+      ...asset,
+      currentPrice: Math.round(result.price * 10000) / 10000,
+      lastUpdated: new Date().toISOString(),
+      priceStale: false,
+    };
   });
 
   const updatedAssets = await Promise.all(promises);
