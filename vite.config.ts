@@ -20,6 +20,8 @@ function priceApi(): Plugin {
 
 export default defineConfig(() => {
   return {
+    // GitHub Pages serves the site under /<repo>/; the deploy workflow sets this
+    base: process.env.VITE_BASE || '/',
     plugins: [react(), tailwindcss(), priceApi()],
     resolve: {
       alias: {

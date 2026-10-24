@@ -1,7 +1,8 @@
 /**
- * Server-side price lookups. Runs in Node (Vite dev/preview middleware), so it
- * can call Yahoo Finance and TEFAS directly instead of going through public
- * CORS proxies that see every symbol in the portfolio.
+ * Server-side price lookups. Runs outside the browser (Vite dev/preview
+ * middleware locally, a Cloudflare Worker in production), so it can call
+ * Yahoo Finance and TEFAS directly instead of going through public CORS
+ * proxies that see every symbol in the portfolio.
  */
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
@@ -155,44 +156,54 @@ export function createPriceService(fetchFn: FetchFn = fetch, now: () => number =
   return { getStockQuote, getFundQuote };
 }
 
-function sendJson(res: ServerResponse, status: number, body: unknown) {
-  res.statusCode = status;
-  res.setHeader('Content-Type', 'application/json; charset=utf-8');
-  res.setHeader('Cache-Control', 'no-store');
-  res.end(JSON.stringify(body));
+export interface ApiResult {
+  status: number;
+  body: unknown;
 }
 
+type PriceService = Pick<ReturnType<typeof createPriceService>, 'getStockQuote' | 'getFundQuote'>;
+
 /**
- * Connect-style middleware for:
+ * Shared request logic for the Node middleware and the Cloudflare Worker:
  *   GET /api/quote?symbol=THYAO.IS
  *   GET /api/fund?code=TCD&kind=YAT|EMK
+ * Returns null for paths outside /api/.
  */
-export function createPriceMiddleware(service = createPriceService()) {
-  return async (req: IncomingMessage, res: ServerResponse, next: () => void) => {
-    const url = new URL(req.url || '/', 'http://localhost');
-    if (!url.pathname.startsWith('/api/')) return next();
-    if (req.method !== 'GET') return sendJson(res, 405, { error: 'Yalnızca GET desteklenir' });
+export async function handlePriceRequest(url: URL, method: string, service: PriceService): Promise<ApiResult | null> {
+  if (!url.pathname.startsWith('/api/')) return null;
+  if (method !== 'GET') return { status: 405, body: { error: 'Yalnızca GET desteklenir' } };
 
-    try {
-      if (url.pathname === '/api/quote') {
-        const symbol = url.searchParams.get('symbol') || '';
-        if (!SYMBOL_RE.test(symbol.trim().toUpperCase())) return sendJson(res, 400, { error: 'Geçersiz sembol' });
-        const quote = await service.getStockQuote(symbol);
-        return quote ? sendJson(res, 200, quote) : sendJson(res, 404, { error: 'Fiyat bulunamadı' });
-      }
-
-      if (url.pathname === '/api/fund') {
-        const code = url.searchParams.get('code') || '';
-        const kind = url.searchParams.get('kind') === 'EMK' ? 'EMK' : 'YAT';
-        if (!FUND_RE.test(code.trim().toUpperCase())) return sendJson(res, 400, { error: 'Geçersiz fon kodu' });
-        const quote = await service.getFundQuote(code, kind);
-        return quote ? sendJson(res, 200, quote) : sendJson(res, 404, { error: 'Fiyat bulunamadı' });
-      }
-
-      return sendJson(res, 404, { error: 'Bilinmeyen uç nokta' });
-    } catch (err) {
-      console.error('Price API error', err);
-      return sendJson(res, 502, { error: 'Fiyat kaynağına ulaşılamadı' });
+  try {
+    if (url.pathname === '/api/quote') {
+      const symbol = url.searchParams.get('symbol') || '';
+      if (!SYMBOL_RE.test(symbol.trim().toUpperCase())) return { status: 400, body: { error: 'Geçersiz sembol' } };
+      const quote = await service.getStockQuote(symbol);
+      return quote ? { status: 200, body: quote } : { status: 404, body: { error: 'Fiyat bulunamadı' } };
     }
+
+    if (url.pathname === '/api/fund') {
+      const code = url.searchParams.get('code') || '';
+      const kind = url.searchParams.get('kind') === 'EMK' ? 'EMK' : 'YAT';
+      if (!FUND_RE.test(code.trim().toUpperCase())) return { status: 400, body: { error: 'Geçersiz fon kodu' } };
+      const quote = await service.getFundQuote(code, kind);
+      return quote ? { status: 200, body: quote } : { status: 404, body: { error: 'Fiyat bulunamadı' } };
+    }
+
+    return { status: 404, body: { error: 'Bilinmeyen uç nokta' } };
+  } catch (err) {
+    console.error('Price API error', err);
+    return { status: 502, body: { error: 'Fiyat kaynağına ulaşılamadı' } };
+  }
+}
+
+/** Connect-style middleware used by the Vite dev and preview servers. */
+export function createPriceMiddleware(service: PriceService = createPriceService()) {
+  return async (req: IncomingMessage, res: ServerResponse, next: () => void) => {
+    const result = await handlePriceRequest(new URL(req.url || '/', 'http://localhost'), req.method || 'GET', service);
+    if (!result) return next();
+    res.statusCode = result.status;
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    res.setHeader('Cache-Control', 'no-store');
+    res.end(JSON.stringify(result.body));
   };
 }

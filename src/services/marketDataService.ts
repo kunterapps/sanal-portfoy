@@ -179,15 +179,19 @@ export interface ServerQuote {
   asOf: string;
 }
 
+// Price API location: same origin in local dev/preview, the Cloudflare Worker
+// URL in the GitHub Pages build (set via VITE_PRICE_API_URL at build time).
+const PRICE_API_BASE = (import.meta.env.VITE_PRICE_API_URL || '').replace(/\/+$/, '');
+
 /**
- * Fetches a quote from the app's own price API (see server/priceApi.ts),
+ * Fetches a quote from the app's price API (see server/priceApi.ts),
  * which calls Yahoo Finance / TEFAS server-side.
  */
 async function fetchServerQuote(path: string): Promise<ServerQuote | null> {
   try {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 12000);
-    const res = await fetch(path, { signal: controller.signal });
+    const res = await fetch(`${PRICE_API_BASE}${path}`, { signal: controller.signal });
     clearTimeout(timeoutId);
     if (!res.ok) return null;
     const data = await res.json();

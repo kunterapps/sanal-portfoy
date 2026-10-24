@@ -10,7 +10,9 @@
     "preview": "vite preview",
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "worker:dev": "npx wrangler@4 dev",
+    "worker:deploy": "npx wrangler@4 deploy"
   },
   "dependencies": {
     "lucide-react": "^0.546.0",
