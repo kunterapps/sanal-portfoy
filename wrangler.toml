@@ -1,5 +1,5 @@
 # Cloudflare Worker for the price API (used by the GitHub Pages build).
-# Deploy: npx wrangler login && npx wrangler deploy
+# Deploy: npm run worker:deploy, or automatically via .github/workflows/deploy-worker.yml
 name = "sanal-portfoy-fiyat"
 main = "worker/index.ts"
 compatibility_date = "2026-10-01"

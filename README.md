@@ -67,7 +67,18 @@ Site GitHub Pages'de, hisse/fon fiyat API'si ücretsiz bir Cloudflare Worker'da 
 3. **Adresi tanıtın:** repo › Settings › Secrets and variables › Actions › **Variables** sekmesinde `PRICE_API_URL` adında bir değişken oluşturup Worker adresini yazın.
 4. **Yayınlayın:** Actions sekmesinde "GitHub Pages" iş akışını çalıştırın (sonraki her `main` güncellemesinde kendiliğinden çalışır). Site `https://kunterapps.github.io/sanal-portfoy/` adresinde açılır.
 
-Worker yalnızca `wrangler.toml` içindeki `ALLOWED_ORIGINS` listesindeki sitelerden gelen istekleri kabul eder. Siteyi başka bir adreste yayınlarsanız bu listeye ekleyip `npm run worker:deploy` ile yeniden yayınlayın.
+### Worker'ı otomatik yayınlama (isteğe bağlı)
+
+`server/`, `worker/` veya `wrangler.toml` değiştiğinde "Cloudflare Worker" iş akışı Worker'ı kendiliğinden yayınlar. Bunun için bir kez:
+
+1. Cloudflare panelinde sağ üstten **My Profile › API Tokens › Create Token** deyip **Edit Cloudflare Workers** şablonunu seçin. Account Resources'ta kendi hesabınızı, Zone Resources'ta "All zones" seçip anahtarı oluşturun ve kopyalayın.
+2. Cloudflare panelinde **Workers & Pages** sayfasının sağındaki **Account ID** değerini kopyalayın.
+3. GitHub'da repo › Settings › Secrets and variables › Actions › **Secrets** sekmesinde iki secret ekleyin: `CLOUDFLARE_API_TOKEN` (anahtar) ve `CLOUDFLARE_ACCOUNT_ID` (hesap kimliği).
+4. Actions sekmesinde "Cloudflare Worker" iş akışını bir kez elle çalıştırın.
+
+Secret tanımlı değilse iş akışı bir uyarı yazıp hiçbir şey yayınlamadan biter; Worker'ı yine `npm run worker:deploy` ile elle yayınlayabilirsiniz.
+
+Worker yalnızca `wrangler.toml` içindeki `ALLOWED_ORIGINS` listesindeki sitelerden gelen istekleri kabul eder. Siteyi başka bir adreste yayınlarsanız bu listeye ekleyin; Worker yeniden yayınlanır (otomatik yayın kurulu değilse `npm run worker:deploy`).
 
 Veriler yine yalnızca tarayıcınızda tutulur; Worker sadece sorulan sembolün fiyatını döndürür, portföy bilgisi saklamaz.
 
