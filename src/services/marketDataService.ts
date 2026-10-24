@@ -271,8 +271,12 @@ export async function fetchLivePriceForAsset(
 
     // 6. Cryptocurrencies (BTC, ETH, SOL, AVAX, etc.)
     if (asset.category === 'CRYPTO') {
-      const sym = asset.symbol.trim().toUpperCase().replace(/USDT$/, '').replace(/-USD$/, '');
-      const pair = `${sym}USDT`;
+      const raw = asset.symbol.trim().toUpperCase().replace(/-USD$/, '');
+      // "BTCUSDT" → "BTC", but "USDT" itself stays "USDT"
+      const sym = raw.length > 4 ? raw.replace(/USDT$/, '') : raw;
+      // Tether has no USDT pair; quote it against TRY instead
+      const pair = sym === 'USDT' ? 'USDTTRY' : `${sym}USDT`;
+      const pairCurrency = sym === 'USDT' ? 'TRY' : 'USD';
 
       // 6.1 Try Binance Public API (CORS open, real-time 24/7)
       try {
@@ -287,7 +291,7 @@ export async function fetchLivePriceForAsset(
           const data = await res.json();
           const p = parseFloat(data.price);
           if (!isNaN(p) && p > 0) {
-            const finalPrice = p * crossRate('USD', asset.currentCurrency, rates);
+            const finalPrice = p * crossRate(pairCurrency, asset.currentCurrency, rates);
             return { price: finalPrice, success: true };
           }
         }

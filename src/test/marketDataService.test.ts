@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { batchUpdatePortfolioPrices, fetchLivePriceForAsset, parseTurkishNumber, quoteInCurrency } from '../services/marketDataService';
 import { makeAsset, RATES } from './fixtures';
 
@@ -55,5 +55,40 @@ describe('quoteInCurrency', () => {
     expect(quoteInCurrency(q, 'TRY', RATES)).toBe(440);
     expect(quoteInCurrency(q, 'EUR', RATES)).toBe(10);
     expect(quoteInCurrency({ ...q, currency: 'JPY' }, 'TRY', RATES)).toBe(10);
+  });
+});
+
+describe('fetchLivePriceForAsset (crypto)', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  function stubBinance(prices: Record<string, number>) {
+    const fetchMock = vi.fn(async (url: string) => {
+      const symbol = new URL(url).searchParams.get('symbol') || '';
+      return symbol in prices
+        ? new Response(JSON.stringify({ symbol, price: String(prices[symbol]) }))
+        : new Response('{"code":-1121,"msg":"Invalid symbol."}', { status: 400 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    return fetchMock;
+  }
+
+  it('prices USDT from the USDT/TRY pair', async () => {
+    const fetchMock = stubBinance({ USDTTRY: 41.5 });
+    const asset = makeAsset({ category: 'CRYPTO', symbol: 'USDT', currentCurrency: 'TRY' });
+    expect(await fetchLivePriceForAsset(asset, RATES)).toEqual({ price: 41.5, success: true });
+    expect(String(fetchMock.mock.calls[0][0])).toContain('symbol=USDTTRY');
+  });
+
+  it('converts USDT into a USD-held asset', async () => {
+    stubBinance({ USDTTRY: RATES.USD_TRY });
+    const asset = makeAsset({ category: 'CRYPTO', symbol: 'USDT', currentCurrency: 'USD' });
+    expect((await fetchLivePriceForAsset(asset, RATES)).price).toBeCloseTo(1);
+  });
+
+  it('still strips a USDT suffix from other coins', async () => {
+    const fetchMock = stubBinance({ BTCUSDT: 100_000 });
+    const asset = makeAsset({ category: 'CRYPTO', symbol: 'BTCUSDT', currentCurrency: 'USD' });
+    expect(await fetchLivePriceForAsset(asset, RATES)).toEqual({ price: 100_000, success: true });
+    expect(String(fetchMock.mock.calls[0][0])).toContain('symbol=BTCUSDT');
   });
 });
