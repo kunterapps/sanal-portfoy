@@ -28,7 +28,11 @@ function corsHeaders(request: Request, env: Env): Record<string, string> {
   };
 }
 
-export async function handleWorkerRequest(request: Request, env: Env, priceService = service): Promise<Response> {
+export async function handleWorkerRequest(
+  request: Request,
+  env: Env,
+  priceService: Parameters<typeof handlePriceRequest>[2] = service
+): Promise<Response> {
   const cors = corsHeaders(request, env);
   if (request.method === 'OPTIONS') {
     return new Response(null, { status: Object.keys(cors).length ? 204 : 403, headers: cors });

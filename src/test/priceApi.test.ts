@@ -1,6 +1,14 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { createPriceMiddleware, createPriceService, parseTefasHistory, parseYahooChart } from '../../server/priceApi';
+import {
+  cookieHeader,
+  createPriceMiddleware,
+  createPriceService,
+  handlePriceRequest,
+  parseTefasFundPage,
+  parseTefasHistory,
+  parseYahooChart,
+} from '../../server/priceApi';
 
 const yahoo = (meta: object, closes: (number | null)[] = []) => ({
   chart: { result: [{ meta, indicators: { quote: [{ close: closes }] } }] },
@@ -51,8 +59,11 @@ describe('parseTefasHistory', () => {
 });
 
 function jsonResponse(body: unknown, ok = true) {
-  return { ok, json: async () => body } as Response;
+  return new Response(JSON.stringify(body), { status: ok ? 200 : 500 });
 }
+
+const htmlResponse = (html: string, status = 200, headers: HeadersInit = {}) =>
+  new Response(html, { status, headers: { 'Content-Type': 'text/html', ...headers } });
 
 describe('createPriceService', () => {
   it('fetches a stock quote once and serves it from cache', async () => {
@@ -141,5 +152,52 @@ describe('createPriceMiddleware', () => {
     expect((await call('/api/quote?symbol=%3Cscript%3E')).statusCode).toBe(400);
     expect((await call('/api/quote?symbol=X', 'POST')).statusCode).toBe(405);
     expect((await call('/api/other')).statusCode).toBe(404);
+  });
+});
+
+describe('TEFAS fallbacks', () => {
+  const FUND_PAGE = '<ul class="top-list"><li>Son Fiyat (TL)<span>14,851234</span></li><li>Günlük Getiri (%)<span>%0,12</span></li></ul>';
+
+  it('parses the fund page price', () => {
+    expect(parseTefasFundPage(FUND_PAGE)?.price).toBe(14.851234);
+    expect(parseTefasFundPage('<li>Son Fiyat (TL)<span>1.234,50</span></li>')?.price).toBe(1234.5);
+    expect(parseTefasFundPage('<html>Request blocked</html>')).toBeNull();
+  });
+
+  it('builds a Cookie header from Set-Cookie', () => {
+    const h = new Headers();
+    h.append('Set-Cookie', 'ASP.NET_SessionId=abc; path=/; HttpOnly');
+    h.append('Set-Cookie', 'TS01=xyz; Path=/');
+    expect(cookieHeader(h)).toBe('ASP.NET_SessionId=abc; TS01=xyz');
+  });
+
+  it('retries the API with session cookies when the first call is blocked', async () => {
+    const fetchFn = vi
+      .fn()
+      .mockResolvedValueOnce(htmlResponse('<html>The requested URL was rejected</html>'))
+      .mockResolvedValueOnce(htmlResponse('<html>page</html>', 200, { 'Set-Cookie': 'ASP.NET_SessionId=abc; path=/' }))
+      .mockResolvedValueOnce(jsonResponse({ data: [{ TARIH: '1761264000000', FIYAT: 2.5 }] }));
+    const service = createPriceService(fetchFn as unknown as typeof fetch);
+    expect((await service.getFundQuote('TCD', 'YAT'))?.price).toBe(2.5);
+    expect((fetchFn.mock.calls[2][1] as RequestInit).headers).toMatchObject({ Cookie: 'ASP.NET_SessionId=abc' });
+  });
+
+  it('falls back to the fund page', async () => {
+    const fetchFn = vi.fn(async (url: string) =>
+      url.includes('FonAnaliz') ? htmlResponse(FUND_PAGE) : htmlResponse('<html>blocked</html>', 403)
+    );
+    const service = createPriceService(fetchFn as unknown as typeof fetch);
+    expect((await service.getFundQuote('TCD', 'YAT'))?.price).toBe(14.851234);
+    expect(String(fetchFn.mock.calls.at(-1)?.[0])).toContain('FonAnaliz.aspx?FonKod=TCD');
+  });
+
+  it('reports what each source answered when all fail', async () => {
+    const fetchFn = vi.fn(async () => htmlResponse('<html><body>Access denied</body></html>', 403));
+    const service = createPriceService(fetchFn as unknown as typeof fetch);
+    const result = await handlePriceRequest(new URL('http://x/api/fund?code=TCD'), 'GET', service);
+    expect(result?.status).toBe(404);
+    const details = (result?.body as { details: { source: string; status: number; note?: string }[] }).details;
+    expect(details.map((d) => d.source)).toEqual(['tefas-api', 'tefas-page']);
+    expect(details[0]).toMatchObject({ status: 403, note: 'Access denied' });
   });
 });
