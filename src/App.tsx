@@ -33,7 +33,6 @@ import {
   sanitizeSnapshots,
   upsertTodaySnapshot,
 } from './utils/snapshots';
-import { triggerDownloadStandaloneHtml } from './utils/standaloneHtmlGenerator';
 import { getCashUnitPrice } from './utils/currency';
 import { applyTransactions, ensureTransactions, TransactionError } from './utils/transactions';
 import { TransactionModal } from './components/TransactionModal';
@@ -338,7 +337,6 @@ export default function App() {
           setIsAssetModalOpen(true);
         }}
         onOpenExportModal={() => setIsExportModalOpen(true)}
-        onDownloadHtml={() => triggerDownloadStandaloneHtml(assets, rates, snapshots)}
       />
 
       {/* Main Viewport Container */}
@@ -411,13 +409,6 @@ export default function App() {
             <span>Kişisel Yatırım ve Portföy Takip Platformu</span>
           </div>
           <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1">
-            <button
-              onClick={() => triggerDownloadStandaloneHtml(assets, rates, snapshots)}
-              className="text-indigo-400 hover:text-indigo-300 transition-colors"
-            >
-              GitHub Pages HTML İndir
-            </button>
-            <span>·</span>
             <button
               onClick={() => setIsExportModalOpen(true)}
               className="text-slate-400 hover:text-slate-200 transition-colors"

@@ -86,7 +86,3 @@ Tek dosya HTML sürümü işlem geçmişini taşır ama işlem ekleme arayüzü 
 ## Değer geçmişi
 
 Uygulama her gün portföyün toplam değerini ve maliyetini bir kez kaydeder (aynı gün içindeki son değer geçerlidir). "Zaman İçinde Değer Değişimi" grafiği ve "Son Kayıttan Bu Yana Değişim" kartı bu kayıtlardan hesaplanır. Değişim kâr/zarar üzerinden ölçüldüğü için yeni varlık eklemek kazanç gibi görünmez. Kayıtlar JSON yedeğine de dahildir.
-
-## Tek dosya HTML
-
-"HTML İndir" butonu, portföyü içine gömülü olarak taşıyan bağımsız bir `index.html` üretir (Vue ve Chart.js CDN üzerinden yüklenir). Bu dosya GitHub Pages gibi statik bir barındırmaya doğrudan yüklenebilir. Depodaki `standalone-portfolio.html` bu çıktının bir örneğidir.

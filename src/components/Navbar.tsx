@@ -1,5 +1,5 @@
 import React from 'react';
-import { Plus, TrendingUp, RefreshCw, Download, FileCode } from 'lucide-react';
+import { Plus, TrendingUp, RefreshCw, Download } from 'lucide-react';
 import { ExchangeRates } from '../types/portfolio';
 import { calculateGoldUnitPrice } from '../utils/goldCalculations';
 import { formatCurrency } from '../utils/portfolioCalculations';
@@ -10,7 +10,6 @@ interface NavbarProps {
   onRefresh: () => void;
   onOpenAddModal: () => void;
   onOpenExportModal: () => void;
-  onDownloadHtml: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -19,7 +18,6 @@ export const Navbar: React.FC<NavbarProps> = ({
   onRefresh,
   onOpenAddModal,
   onOpenExportModal,
-  onDownloadHtml,
 }) => {
   const ceyrekPrice = calculateGoldUnitPrice('CEYREK', rates.GRAM_GOLD_TRY, rates.SILVER_GRAM_TRY, rates);
 
@@ -69,15 +67,6 @@ export const Navbar: React.FC<NavbarProps> = ({
 
         {/* Zone 3: Primary Action & Tools */}
         <div className="flex items-center gap-2.5 shrink-0">
-          <button
-            onClick={onDownloadHtml}
-            title="GitHub Pages uyumlu tek parça bağımsız HTML olarak indir"
-            className="hidden sm:inline-flex items-center gap-2 h-9 px-3 text-sm font-medium text-slate-300 hover:text-white bg-slate-900 hover:bg-slate-800 rounded-lg border border-slate-800 transition-colors whitespace-nowrap"
-          >
-            <FileCode className="w-3.5 h-3.5 text-indigo-400" />
-            <span>HTML İndir</span>
-          </button>
-
           <button
             onClick={onOpenExportModal}
             title="JSON Yedekleme ve İçe/Dışa Aktarma"
