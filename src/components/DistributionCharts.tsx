@@ -47,10 +47,10 @@ export const DistributionCharts: React.FC<DistributionChartsProps> = ({
       <div className="bg-[#0f172a] border border-slate-800 rounded-2xl p-6 flex flex-col justify-between">
         <div>
           <div className="flex items-center justify-between mb-1">
-            <h3 className="text-sm font-bold text-white tracking-tight">Varlık Sınıfı Dağılımı</h3>
-            <span className="text-[11px] font-mono text-slate-500">Kategori Bazlı</span>
+            <h3 className="text-base font-semibold text-white">Varlık Sınıfı Dağılımı</h3>
+            <span className="text-xs text-slate-500">Kategori Bazlı</span>
           </div>
-          <p className="text-xs text-slate-400 mb-6">
+          <p className="text-sm text-slate-400 mb-6">
             Hisse senedi, fon, altın ve nakit varlıklarınızın portföy ağırlığı
           </p>
 
@@ -91,15 +91,15 @@ export const DistributionCharts: React.FC<DistributionChartsProps> = ({
                 </svg>
                 {/* Center text */}
                 <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none text-center">
-                  <span className="text-xs text-slate-400 font-medium">Toplam</span>
-                  <span className="text-sm font-bold text-white font-mono tabular-nums">
+                  <span className="text-xs text-slate-400">Toplam</span>
+                  <span className="text-sm font-bold text-white tabular-nums">
                     {categorySummaries.length} Tür
                   </span>
                 </div>
               </div>
 
               {/* Legend List */}
-              <div className="flex-1 w-full space-y-2.5">
+              <div className="flex-1 w-full space-y-1">
                 {slices.map((slice) => (
                   <div
                     key={slice.category}
@@ -114,13 +114,13 @@ export const DistributionCharts: React.FC<DistributionChartsProps> = ({
                         className="w-2.5 h-2.5 rounded-sm shrink-0"
                         style={{ backgroundColor: slice.color }}
                       />
-                      <span className="text-xs font-medium text-slate-200 truncate">
+                      <span className="text-sm text-slate-200 truncate">
                         {slice.label}
                       </span>
                     </div>
-                    <div className="text-right shrink-0 font-mono text-xs tabular-nums">
-                      <span className="font-bold text-white">%{slice.percent.toFixed(1)}</span>
-                      <span className="text-slate-400 text-[11px] ml-2">
+                    <div className="flex items-baseline shrink-0 tabular-nums text-sm">
+                      <span className="w-14 text-right font-semibold text-white">%{slice.percent.toFixed(1)}</span>
+                      <span className="w-24 text-right text-slate-400">
                         {formatCurrency(baseCurrency === 'TRY' ? slice.valueTRY : slice.valueUSD, baseCurrency, 0)}
                       </span>
                     </div>
@@ -131,7 +131,7 @@ export const DistributionCharts: React.FC<DistributionChartsProps> = ({
           )}
         </div>
 
-        <div className="text-[11px] text-slate-500 pt-3 border-t border-slate-800/80 mt-4 flex items-center justify-between font-mono">
+        <div className="text-sm text-slate-500 pt-3 border-t border-slate-800/80 mt-4 flex items-center justify-between tabular-nums">
           <span>Çeşitlendirme Skoru</span>
           <span className="text-indigo-400 font-semibold">
             {categorySummaries.length >= 4 ? 'Mükemmel Dağılım' : categorySummaries.length >= 2 ? 'Orta Dağılım' : 'Konsantre Portföy'}
@@ -143,10 +143,10 @@ export const DistributionCharts: React.FC<DistributionChartsProps> = ({
       <div className="bg-[#0f172a] border border-slate-800 rounded-2xl p-6 flex flex-col justify-between">
         <div>
           <div className="flex items-center justify-between mb-1">
-            <h3 className="text-sm font-bold text-white tracking-tight">Döviz Riski Dağılımı</h3>
-            <span className="text-[11px] font-mono text-slate-500">Kur Maruziyeti</span>
+            <h3 className="text-base font-semibold text-white">Döviz Riski Dağılımı</h3>
+            <span className="text-xs text-slate-500">Kur Maruziyeti</span>
           </div>
-          <p className="text-xs text-slate-400 mb-6">
+          <p className="text-sm text-slate-400 mb-6">
             Portföyünüzün TRY, USD, EUR ve GBP para birimlerindeki pozisyon dengesi
           </p>
 
@@ -155,21 +155,21 @@ export const DistributionCharts: React.FC<DistributionChartsProps> = ({
               Henüz para birimi dağılımı için varlık bulunmuyor.
             </div>
           ) : (
-            <div className="space-y-4">
+            <div className="space-y-5">
               {currencySummaries.map((curr) => (
                 <div key={curr.currency} className="space-y-1.5">
-                  <div className="flex items-center justify-between text-xs">
+                  <div className="flex items-center justify-between text-sm">
                     <div className="flex items-center gap-2">
                       <span
                         className="w-2.5 h-2.5 rounded-sm"
                         style={{ backgroundColor: curr.color }}
                       />
-                      <span className="font-semibold text-slate-200">{curr.label}</span>
-                      <span className="text-slate-500 font-mono">({curr.currency})</span>
+                      <span className="text-slate-200">{curr.label}</span>
+                      <span className="text-slate-500 text-xs">{curr.currency}</span>
                     </div>
-                    <div className="font-mono text-xs tabular-nums">
-                      <span className="font-bold text-white">%{curr.percentage.toFixed(1)}</span>
-                      <span className="text-slate-400 text-[11px] ml-2">
+                    <div className="flex items-baseline tabular-nums">
+                      <span className="w-14 text-right font-semibold text-white">%{curr.percentage.toFixed(1)}</span>
+                      <span className="w-24 text-right text-slate-400">
                         {formatCurrency(curr.valueTRY, 'TRY', 0)}
                       </span>
                     </div>
@@ -191,7 +191,7 @@ export const DistributionCharts: React.FC<DistributionChartsProps> = ({
           )}
         </div>
 
-        <div className="text-[11px] text-slate-500 pt-3 border-t border-slate-800/80 mt-4 flex items-center justify-between font-mono">
+        <div className="text-sm text-slate-500 pt-3 border-t border-slate-800/80 mt-4 flex items-center justify-between tabular-nums">
           <span>Yabancı Para Oranı</span>
           <span className="text-amber-400 font-semibold tabular-nums">
             %{

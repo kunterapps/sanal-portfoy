@@ -139,7 +139,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
             </div>
             <div>
               <h4 className="text-xs font-bold text-white">GitHub Pages İçin Tek Dosya HTML</h4>
-              <p className="text-[11px] text-slate-400">
+              <p className="text-xs text-slate-400">
                 Tailwind CSS, Vue.js ve Chart.js CDN içeren tamamen bağımsız tek parça index.html
               </p>
             </div>
@@ -163,7 +163,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
                 <Download className="w-4 h-4 text-emerald-400" />
                 <span>JSON Portföy Yedeği</span>
               </h4>
-              <p className="text-[11px] text-slate-400 mt-1">
+              <p className="text-xs text-slate-400 mt-1">
                 Tüm varlıklarınızı, maliyetlerinizi ve notlarınızı güvenli JSON formatında indirin.
               </p>
             </div>
@@ -183,7 +183,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
                 <Upload className="w-4 h-4 text-sky-400" />
                 <span>JSON Yedeği Yükle</span>
               </h4>
-              <p className="text-[11px] text-slate-400 mt-1">
+              <p className="text-xs text-slate-400 mt-1">
                 Daha önce aldığınız bir JSON yedeğini yükleyerek portföyünüzü geri getirin.
               </p>
             </div>
@@ -211,13 +211,13 @@ export const ExportModal: React.FC<ExportModalProps> = ({
             <button
               type="button"
               onClick={copySteps}
-              className="text-[11px] text-indigo-400 hover:text-indigo-300 flex items-center gap-1"
+              className="text-xs text-indigo-400 hover:text-indigo-300 flex items-center gap-1"
             >
               <Copy className="w-3 h-3" />
               <span>{copied ? 'Kopyalandı!' : 'Kopyala'}</span>
             </button>
           </div>
-          <pre className="text-[11px] text-slate-400 font-mono whitespace-pre-wrap leading-relaxed bg-slate-950 p-3 rounded-lg border border-slate-900">
+          <pre className="text-xs text-slate-400 font-mono whitespace-pre-wrap leading-relaxed bg-slate-950 p-3 rounded-lg border border-slate-900">
             {gitHubPagesSteps}
           </pre>
         </div>

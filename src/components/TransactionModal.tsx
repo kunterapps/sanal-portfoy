@@ -98,7 +98,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
         <div className="flex items-center justify-between border-b border-slate-800 pb-4">
           <div>
             <h3 className="text-base font-bold text-white tracking-tight">Alış / Satış İşlemleri</h3>
-            <span className="text-xs text-indigo-400 font-mono font-semibold">{asset.symbol}</span>
+            <span className="text-xs text-indigo-400 tabular-nums font-semibold">{asset.symbol}</span>
             <span className="text-xs text-slate-400 ml-1">· {asset.name}</span>
           </div>
           <button
@@ -110,7 +110,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
         </div>
 
         {/* Current position */}
-        <div className="grid grid-cols-3 gap-3 text-xs font-mono">
+        <div className="grid grid-cols-3 gap-3 text-xs tabular-nums">
           <div className="bg-slate-900/70 border border-slate-800 rounded-xl p-3">
             <div className="text-slate-500 mb-1">Eldeki Miktar</div>
             <div className="text-white font-bold">{formatQty(asset.quantity)}</div>
@@ -158,7 +158,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                 value={date}
                 max={localDayKey(new Date())}
                 onChange={(e) => setDate(e.target.value)}
-                className="w-full bg-slate-900 border border-slate-800 rounded-xl px-2.5 py-2.5 text-white font-mono focus:outline-none focus:border-indigo-500"
+                className="w-full bg-slate-900 border border-slate-800 rounded-xl px-2.5 py-2.5 text-white tabular-nums focus:outline-none focus:border-indigo-500"
               />
             </div>
             <div>
@@ -170,7 +170,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                 required
                 value={quantity || ''}
                 onChange={(e) => setQuantity(parseFloat(e.target.value) || 0)}
-                className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2.5 text-white font-mono focus:outline-none focus:border-indigo-500"
+                className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2.5 text-white tabular-nums focus:outline-none focus:border-indigo-500"
               />
             </div>
             <div>
@@ -182,7 +182,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                 required
                 value={price}
                 onChange={(e) => setPrice(parseFloat(e.target.value) || 0)}
-                className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2.5 text-white font-mono focus:outline-none focus:border-indigo-500"
+                className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2.5 text-white tabular-nums focus:outline-none focus:border-indigo-500"
               />
             </div>
             <div>
@@ -194,14 +194,14 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                 value={fee || ''}
                 placeholder="0"
                 onChange={(e) => setFee(parseFloat(e.target.value) || 0)}
-                className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2.5 text-white font-mono focus:outline-none focus:border-indigo-500"
+                className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2.5 text-white tabular-nums focus:outline-none focus:border-indigo-500"
               />
             </div>
           </div>
 
           {/* Preview */}
           {preview && (
-            <div className="text-[11px] font-mono bg-slate-900/60 border border-slate-800 rounded-xl px-3 py-2 space-y-0.5">
+            <div className="text-xs tabular-nums bg-slate-900/60 border border-slate-800 rounded-xl px-3 py-2 space-y-0.5">
               {'error' in preview && preview.error ? (
                 <div className="text-rose-400">{preview.error}</div>
               ) : (
@@ -237,7 +237,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
             </div>
           )}
 
-          {error && <div className="text-[11px] text-rose-400">{error}</div>}
+          {error && <div className="text-xs text-rose-400">{error}</div>}
 
           <div className="flex justify-end">
             <button
@@ -260,7 +260,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
             <p className="text-xs text-slate-500">Henüz işlem yok.</p>
           ) : (
             <div className="max-h-64 overflow-y-auto">
-              <table className="w-full text-[11px] font-mono">
+              <table className="w-full text-xs tabular-nums">
                 <thead className="text-slate-500">
                   <tr>
                     <th className="text-left font-medium pb-1.5">Tarih</th>

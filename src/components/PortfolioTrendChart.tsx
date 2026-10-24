@@ -36,7 +36,7 @@ export const PortfolioTrendChart: React.FC<PortfolioTrendChartProps> = ({
           key={r.key}
           type="button"
           onClick={() => onRangeChange(r.key)}
-          className={`px-3 py-1 text-xs font-semibold rounded-lg transition-colors ${
+          className={`h-7 px-3 text-xs font-semibold rounded-lg transition-colors ${
             selectedRange === r.key
               ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-600/30'
               : 'text-slate-400 hover:text-slate-200'
@@ -52,14 +52,14 @@ export const PortfolioTrendChart: React.FC<PortfolioTrendChartProps> = ({
     return (
       <div className="bg-[#0f172a] border border-slate-800 rounded-2xl p-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
-          <h2 className="text-base font-bold text-white tracking-tight">Zaman İçinde Değer Değişimi</h2>
+          <h2 className="text-base font-semibold text-white">Zaman İçinde Değer Değişimi</h2>
           {rangeButtons}
         </div>
         <div className="text-center py-10">
           <div className="w-12 h-12 mx-auto rounded-full bg-slate-900 border border-slate-800 flex items-center justify-center text-slate-500 mb-3">
             📈
           </div>
-          <p className="text-xs text-slate-400 max-w-md mx-auto">
+          <p className="text-sm text-slate-400 max-w-md mx-auto leading-relaxed">
             Grafik, portföyünüzün her gün otomatik kaydedilen gerçek değeriyle oluşur. Bu aralıkta henüz önceki
             günlere ait kayıt yok; uygulamayı farklı günlerde açtıkça eğri burada belirecek.
           </p>
@@ -75,7 +75,7 @@ export const PortfolioTrendChart: React.FC<PortfolioTrendChartProps> = ({
           📈
         </div>
         <h3 className="text-sm font-bold text-white mb-1">Zaman İçinde Değer Gelişim Grafiği</h3>
-        <p className="text-xs text-slate-400 max-w-sm mx-auto">
+        <p className="text-sm text-slate-400 max-w-sm mx-auto leading-relaxed">
           Portföyünüze varlık eklediğinizde, portföyünüzün zaman içindeki gelişim eğrisi, kümülatif kâr/zararı ve maliyet çizgisi burada görüntülenecektir.
         </p>
       </div>
@@ -153,12 +153,12 @@ export const PortfolioTrendChart: React.FC<PortfolioTrendChartProps> = ({
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
         <div>
           <div className="flex items-center gap-2">
-            <h2 className="text-base font-bold text-white tracking-tight">Zaman İçinde Değer Değişimi</h2>
-            <span className="text-[11px] px-2 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-400 font-mono">
+            <h2 className="text-base font-semibold text-white">Zaman İçinde Değer Değişimi</h2>
+            <span className="text-xs px-2 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-400 tabular-nums">
               {baseCurrency} Bazında
             </span>
           </div>
-          <p className="text-xs text-slate-400 mt-0.5">
+          <p className="text-sm text-slate-400 mt-0.5">
             Her gün kaydedilen portföy değeri ve yatırım maliyeti
           </p>
         </div>
@@ -167,7 +167,7 @@ export const PortfolioTrendChart: React.FC<PortfolioTrendChartProps> = ({
       </div>
 
       {/* Active Hover / Current Stats Callout */}
-      <div className="flex items-center gap-6 mb-2 text-xs font-mono">
+      <div className="flex flex-wrap items-center gap-x-6 gap-y-1 mb-2 text-sm tabular-nums">
         <div>
           <span className="text-slate-500 mr-1.5">Tarih:</span>
           <span className="text-slate-300 font-semibold">{activePoint.date}</span>
@@ -290,8 +290,8 @@ export const PortfolioTrendChart: React.FC<PortfolioTrendChartProps> = ({
                   textAnchor={i === 0 ? 'start' : i === data.length - 1 ? 'end' : 'middle'}
                   fill={i === data.length - 1 ? '#818cf8' : '#64748b'}
                   fontWeight={i === data.length - 1 ? '600' : '400'}
-                  fontSize="10"
-                  fontFamily="JetBrains Mono"
+                  fontSize="11"
+                  fontFamily="Inter, system-ui, sans-serif"
                 >
                   {d.date}
                 </text>
@@ -303,7 +303,7 @@ export const PortfolioTrendChart: React.FC<PortfolioTrendChartProps> = ({
       </div>
 
       {/* Legend Footer */}
-      <div className="flex items-center justify-between text-[11px] text-slate-400 pt-2 border-t border-slate-800/80">
+      <div className="flex items-center justify-between text-xs text-slate-400 pt-2 border-t border-slate-800/80">
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-1.5">
             <span className="w-3 h-0.5 bg-indigo-500 rounded-full inline-block" />
@@ -314,7 +314,7 @@ export const PortfolioTrendChart: React.FC<PortfolioTrendChartProps> = ({
             <span>Yatırım Maliyeti</span>
           </div>
         </div>
-        <div className="text-slate-500 font-mono">
+        <div className="text-slate-500 tabular-nums">
           Grafik üzerinde imleç ile gezinebilirsiniz
         </div>
       </div>
