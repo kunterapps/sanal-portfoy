@@ -39,10 +39,14 @@ src/
 
 - **Döviz ve altın:** finans.truncgil.com, ulaşılamazsa Binance (PAXG) ve open.er-api.com.
 - **BIST ve yabancı hisseler:** Yahoo Finance, herkese açık CORS proxy'leri üzerinden.
-- **TEFAS/BEFAS:** birkaç deneme uç noktası, başarısız olursa koda gömülü örnek fiyatlar.
+- **TEFAS/BEFAS:** birkaç deneme uç noktası.
 - **Kripto:** Binance, ulaşılamazsa Yahoo Finance.
 
-Hisse ve fon fiyatları üçüncü taraf proxy'lere bağlı olduğundan her zaman güncel olmayabilir.
+Hisse ve fon fiyatları üçüncü taraf proxy'lere bağlı olduğundan her zaman alınamayabilir. Fiyatı alınamayan varlık son bilinen fiyatıyla kalır ve tabloda "Eski fiyat" olarak işaretlenir.
+
+## Değer geçmişi
+
+Uygulama her gün portföyün toplam değerini ve maliyetini bir kez kaydeder (aynı gün içindeki son değer geçerlidir). "Zaman İçinde Değer Değişimi" grafiği ve "Son Kayıttan Bu Yana Değişim" kartı bu kayıtlardan hesaplanır. Değişim kâr/zarar üzerinden ölçüldüğü için yeni varlık eklemek kazanç gibi görünmez. Kayıtlar JSON yedeğine de dahildir.
 
 ## Tek dosya HTML
 

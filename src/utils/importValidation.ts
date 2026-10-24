@@ -1,11 +1,13 @@
-import { AssetCategory, Currency, GoldType, PortfolioAsset } from '../types/portfolio';
+import { AssetCategory, Currency, GoldType, PortfolioAsset, PortfolioSnapshot } from '../types/portfolio';
 import { TURKISH_GOLD_DEFINITIONS } from './goldCalculations';
+import { sanitizeSnapshots } from './snapshots';
 
 const CATEGORIES: AssetCategory[] = ['FOREIGN_STOCK', 'BIST', 'TEFAS', 'BEFAS', 'COMMODITY', 'CASH', 'CRYPTO'];
 const CURRENCIES: Currency[] = ['TRY', 'USD', 'EUR', 'GBP'];
 
 export interface ImportResult {
   assets: PortfolioAsset[];
+  snapshots: PortfolioSnapshot[];
   errors: string[];
 }
 
@@ -25,7 +27,7 @@ export function parsePortfolioBackup(parsed: unknown): ImportResult {
       : null;
 
   if (!rows) {
-    return { assets: [], errors: ['Dosya bir portföy yedeği değil.'] };
+    return { assets: [], snapshots: [], errors: ['Dosya bir portföy yedeği değil.'] };
   }
 
   const assets: PortfolioAsset[] = [];
@@ -81,8 +83,14 @@ export function parsePortfolioBackup(parsed: unknown): ImportResult {
       ...(r.goldType !== undefined && { goldType: r.goldType as GoldType }),
       ...(typeof r.notes === 'string' && { notes: r.notes }),
       ...(typeof r.purchaseDate === 'string' && { purchaseDate: r.purchaseDate }),
+      ...(r.priceStale === true && { priceStale: true }),
     });
   });
 
-  return { assets, errors };
+  const snapshots =
+    parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+      ? sanitizeSnapshots((parsed as { snapshots?: unknown }).snapshots)
+      : [];
+
+  return { assets, snapshots, errors };
 }

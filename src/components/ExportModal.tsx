@@ -1,6 +1,6 @@
 import React, { useRef, useState } from 'react';
 import { X, Download, Upload, FileCode, CheckCircle2, Copy } from 'lucide-react';
-import { PortfolioAsset, ExchangeRates } from '../types/portfolio';
+import { PortfolioAsset, ExchangeRates, PortfolioSnapshot } from '../types/portfolio';
 import { triggerDownloadStandaloneHtml } from '../utils/standaloneHtmlGenerator';
 import { parsePortfolioBackup } from '../utils/importValidation';
 
@@ -9,7 +9,8 @@ interface ExportModalProps {
   onClose: () => void;
   assets: PortfolioAsset[];
   rates: ExchangeRates;
-  onImportAssets: (imported: PortfolioAsset[]) => void;
+  snapshots: PortfolioSnapshot[];
+  onImportAssets: (imported: PortfolioAsset[], snapshots: PortfolioSnapshot[]) => void;
 }
 
 export const ExportModal: React.FC<ExportModalProps> = ({
@@ -17,6 +18,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
   onClose,
   assets,
   rates,
+  snapshots,
   onImportAssets,
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -33,6 +35,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
       assetsCount: assets.length,
       rates,
       assets,
+      snapshots,
     };
     const jsonStr = JSON.stringify(dataToExport, null, 2);
     const blob = new Blob([jsonStr], { type: 'application/json' });
@@ -55,7 +58,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
     reader.onload = (event) => {
       try {
         const content = event.target?.result as string;
-        const { assets: validAssets, errors } = parsePortfolioBackup(JSON.parse(content));
+        const { assets: validAssets, snapshots: importedSnapshots, errors } = parsePortfolioBackup(JSON.parse(content));
 
         if (validAssets.length === 0) {
           setImportStatus(`Hata: Yüklenecek geçerli varlık bulunamadı. ${errors.slice(0, 3).join('; ')}`);
@@ -71,7 +74,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
           return;
         }
 
-        onImportAssets(validAssets);
+        onImportAssets(validAssets, importedSnapshots);
         const skipped = errors.length > 0 ? ` (${errors.length} kayıt atlandı: ${errors.slice(0, 3).join('; ')})` : '';
         setImportStatus(`${validAssets.length} adet varlık başarıyla yüklendi!${skipped}`);
         setTimeout(
@@ -143,7 +146,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
           </div>
           <button
             type="button"
-            onClick={() => triggerDownloadStandaloneHtml(assets, rates)}
+            onClick={() => triggerDownloadStandaloneHtml(assets, rates, snapshots)}
             className="w-full py-2.5 px-4 bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white font-bold text-xs rounded-lg shadow-md shadow-indigo-600/25 flex items-center justify-center gap-2 transition-colors"
           >
             <Download className="w-4 h-4" />

@@ -29,23 +29,6 @@ export const DEFAULT_EXCHANGE_RATES: ExchangeRates = {
   lastUpdated: new Date().toISOString(),
 };
 
-// Curated reference database for popular TEFAS / BEFAS funds for instant offline resilience
-const POPULAR_FUNDS_CACHE: Record<string, { name: string; price: number; type: 'TEFAS' | 'BEFAS' }> = {
-  TCD: { name: 'Tacirler Portföy Değişken Fon', price: 14.85, type: 'TEFAS' },
-  MAC: { name: 'Marmara Capital Portföy Hisse Senedi Fonu', price: 0.892, type: 'TEFAS' },
-  TI2: { name: 'İş Portföy İki Numaralı Değişken Fon', price: 12.45, type: 'TEFAS' },
-  TFF: { name: 'TEB Portföy Altın Fonu', price: 0.162, type: 'TEFAS' },
-  KZL: { name: 'Kuveyt Türk Portföy Altın Katılım Fonu', price: 0.054, type: 'TEFAS' },
-  IPB: { name: 'İstanbul Portföy Birinci Değişken Fon', price: 3.24, type: 'TEFAS' },
-  IIH: { name: 'İstanbul Portföy Üçüncü Hisse Senedi Fonu', price: 0.445, type: 'TEFAS' },
-  AEA: { name: 'Anadolu Hayat Emeklilik Altın Katılım Emeklilik Fonu', price: 0.285, type: 'BEFAS' },
-  BGL: { name: 'Anadolu Hayat Emeklilik Altın Emeklilik Fonu', price: 0.278, type: 'BEFAS' },
-  CHG: { name: 'Garanti Emeklilik Hisse Senedi Emeklilik Fonu', price: 0.512, type: 'BEFAS' },
-  BGP: { name: 'Bereket Emeklilik Katılım Hisse Fonu', price: 0.142, type: 'BEFAS' },
-  VEB: { name: 'Vakıf Emeklilik BIST 30 Endeks Fonu', price: 0.395, type: 'BEFAS' },
-  AHL: { name: 'Anadolu Hayat Dengeli Değişken Grup Emeklilik Fonu', price: 0.418, type: 'BEFAS' },
-};
-
 /**
  * Fetches real-time market exchange rates and Turkish gold prices.
  * Strategy:
@@ -318,11 +301,6 @@ export async function fetchLivePriceForAsset(
           // Continue to next live candidate
         }
       }
-
-      // 5.2 If live endpoints fail (due to weekend/network), check cached database
-      if (POPULAR_FUNDS_CACHE[fundCode]) {
-        return { price: POPULAR_FUNDS_CACHE[fundCode].price, success: true };
-      }
     }
 
     // 6. Cryptocurrencies (BTC, ETH, SOL, AVAX, etc.)
@@ -378,22 +356,20 @@ export async function batchUpdatePortfolioPrices(
 
   const promises = assets.map(async (asset) => {
     const result = await fetchLivePriceForAsset(asset, rates);
-    if (result.success && Math.abs(result.price - asset.currentPrice) > 0.0001) {
-      updatedCount++;
-      return {
-        ...asset,
-        currentPrice: Math.round(result.price * 10000) / 10000,
-        lastUpdated: new Date().toISOString(),
-      };
-    } else if (result.success) {
-      return {
-        ...asset,
-        lastUpdated: new Date().toISOString(),
-      };
-    } else {
+    if (!result.success) {
       failedCount++;
-      return asset;
+      // Keep the last known price but flag it so the UI can show it's outdated
+      return { ...asset, priceStale: true };
     }
+    if (Math.abs(result.price - asset.currentPrice) > 0.0001) {
+      updatedCount++;
+    }
+    return {
+      ...asset,
+      currentPrice: Math.round(result.price * 10000) / 10000,
+      lastUpdated: new Date().toISOString(),
+      priceStale: false,
+    };
   });
 
   const updatedAssets = await Promise.all(promises);

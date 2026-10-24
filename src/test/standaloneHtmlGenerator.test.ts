@@ -16,3 +16,13 @@ describe('generateStandaloneHtml', () => {
     expect(html.match(/<\/script>/g)?.length).toBe(html.match(/<script\b/g)?.length);
   });
 });
+
+describe('standalone export data', () => {
+  it('embeds recorded snapshots and no hard-coded daily change', () => {
+    const snapshot = { date: '2026-10-23', timestamp: 0, totalValueTRY: 1, totalValueUSD: 1, totalCostTRY: 1, totalCostUSD: 1 };
+    const html = generateStandaloneHtml([makeAsset()], RATES, [snapshot]);
+    expect(html).toContain('"2026-10-23"');
+    expect(html).not.toContain('0.0084');
+    expect(html).not.toContain('0.84%');
+  });
+});

@@ -33,6 +33,8 @@ export interface PortfolioAsset {
   goldType?: GoldType;
   notes?: string;
   purchaseDate?: string;
+  /** True when the last live refresh couldn't fetch a price for this asset */
+  priceStale?: boolean;
 }
 
 export interface ExchangeRates {
@@ -56,7 +58,7 @@ export interface ExchangeRates {
 export type TimeRange = '1W' | '1M' | '3M' | '6M' | '1Y' | 'ALL';
 
 export interface PortfolioSnapshot {
-  date: string;
+  date: string;            // Local day, YYYY-MM-DD
   timestamp: number;
   totalValueTRY: number;
   totalValueUSD: number;

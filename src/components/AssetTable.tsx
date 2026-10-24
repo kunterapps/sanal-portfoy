@@ -7,7 +7,8 @@ import {
   DollarSign, 
   ExternalLink,
   ChevronUp,
-  ChevronDown
+  ChevronDown,
+  AlertTriangle
 } from 'lucide-react';
 import { PortfolioAsset, AssetCategory, Currency, ExchangeRates } from '../types/portfolio';
 import { 
@@ -316,6 +317,15 @@ export const AssetTable: React.FC<AssetTableProps> = ({
                       <div className="font-bold text-white">
                         {formatCurrency(asset.currentPrice, asset.currentCurrency, 2)}
                       </div>
+                      {asset.priceStale && (
+                        <div
+                          className="inline-flex items-center gap-1 text-[10px] text-amber-400"
+                          title={`Son güncellemede canlı fiyat alınamadı. Gösterilen fiyat: ${new Date(asset.lastUpdated).toLocaleString('tr-TR')}`}
+                        >
+                          <AlertTriangle className="w-3 h-3" />
+                          Eski fiyat
+                        </div>
+                      )}
                       <button
                         onClick={() => onQuickPriceEdit(asset)}
                         title="Fiyatı elle güncelle"

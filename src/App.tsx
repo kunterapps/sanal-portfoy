@@ -3,7 +3,8 @@ import {
   PortfolioAsset, 
   ExchangeRates, 
   Currency, 
-  TimeRange 
+  TimeRange,
+  PortfolioSnapshot
 } from './types/portfolio';
 import { Navbar } from './components/Navbar';
 import { ExecutiveSummary } from './components/ExecutiveSummary';
@@ -23,14 +24,20 @@ import {
 import { 
   calculatePortfolioTotals, 
   calculateCategorySummaries, 
-  calculateCurrencySummaries, 
-  generateHistoricalTrend 
+  calculateCurrencySummaries 
 } from './utils/portfolioCalculations';
+import {
+  buildTrendSeries,
+  calculateDailyChange,
+  sanitizeSnapshots,
+  upsertTodaySnapshot,
+} from './utils/snapshots';
 import { triggerDownloadStandaloneHtml } from './utils/standaloneHtmlGenerator';
 import { getCashUnitPrice } from './utils/currency';
 
 const STORAGE_KEY = 'my_personal_portfolio_assets';
 const RATES_STORAGE_KEY = 'my_personal_portfolio_rates';
+const SNAPSHOTS_STORAGE_KEY = 'my_personal_portfolio_snapshots';
 
 export default function App() {
   // 1. Assets State (Local-first)
@@ -60,6 +67,15 @@ export default function App() {
       }
     } catch {}
     return DEFAULT_EXCHANGE_RATES;
+  });
+
+  // 2b. Daily value history (one snapshot per day)
+  const [snapshots, setSnapshots] = useState<PortfolioSnapshot[]>(() => {
+    try {
+      return sanitizeSnapshots(JSON.parse(localStorage.getItem(SNAPSHOTS_STORAGE_KEY) || '[]'));
+    } catch {
+      return [];
+    }
   });
 
   // 3. UI Configuration States
@@ -94,6 +110,12 @@ export default function App() {
       localStorage.setItem(RATES_STORAGE_KEY, JSON.stringify(rates));
     } catch {}
   }, [rates]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(SNAPSHOTS_STORAGE_KEY, JSON.stringify(snapshots));
+    } catch {}
+  }, [snapshots]);
 
   // Initial Market Rates Fetch on Mount
   useEffect(() => {
@@ -138,7 +160,11 @@ export default function App() {
       if (assets.length > 0) {
         const result = await batchUpdatePortfolioPrices(assets, newRates);
         setAssets(result.updatedAssets);
-        showToast(`Piyasalar güncellendi! (${result.updatedCount} varlık güncellendi)`);
+        showToast(
+          result.failedCount > 0
+            ? `${result.updatedCount} varlık güncellendi, ${result.failedCount} varlığın fiyatı alınamadı (son fiyat korunuyor).`
+            : `Piyasalar güncellendi! (${result.updatedCount} varlık güncellendi)`
+        );
       } else {
         showToast('Döviz kurları ve altın fiyatları güncellendi!');
       }
@@ -184,7 +210,7 @@ export default function App() {
     setAssets((prev) =>
       prev.map((a) =>
         a.id === assetId
-          ? { ...a, currentPrice: newPrice, lastUpdated: new Date().toISOString() }
+          ? { ...a, currentPrice: newPrice, lastUpdated: new Date().toISOString(), priceStale: false }
           : a
       )
     );
@@ -204,12 +230,15 @@ export default function App() {
       return asset;
     });
     setAssets(synced);
+    // Demo values shouldn't mix into a real value history
+    setSnapshots([]);
     showToast('Örnek yatırım varlıkları güncel kurlarla yüklendi!');
   };
 
   // JSON Import
-  const handleImportAssets = (imported: PortfolioAsset[]) => {
+  const handleImportAssets = (imported: PortfolioAsset[], importedSnapshots: PortfolioSnapshot[]) => {
     setAssets(imported);
+    setSnapshots(importedSnapshots);
     showToast(`${imported.length} adet varlık içe aktarıldı!`);
   };
 
@@ -226,9 +255,18 @@ export default function App() {
     return calculateCurrencySummaries(assets, rates);
   }, [assets, rates]);
 
-  const trendData = useMemo(() => {
-    return generateHistoricalTrend(assets, rates, selectedRange);
-  }, [assets, rates, selectedRange]);
+  // Record today's value whenever it changes
+  useEffect(() => {
+    if (assets.length === 0) return;
+    setSnapshots((prev) => upsertTodaySnapshot(prev, totals));
+  }, [assets.length, totals]);
+
+  const dailyChange = useMemo(() => calculateDailyChange(snapshots, totals), [snapshots, totals]);
+
+  const trendData = useMemo(
+    () => buildTrendSeries(snapshots, totals, selectedRange),
+    [snapshots, totals, selectedRange]
+  );
 
   return (
     <div className="min-h-screen bg-[#090d16] text-slate-100 flex flex-col selection:bg-indigo-500 selection:text-white">
@@ -250,7 +288,7 @@ export default function App() {
           setIsAssetModalOpen(true);
         }}
         onOpenExportModal={() => setIsExportModalOpen(true)}
-        onDownloadHtml={() => triggerDownloadStandaloneHtml(assets, rates)}
+        onDownloadHtml={() => triggerDownloadStandaloneHtml(assets, rates, snapshots)}
       />
 
       {/* Main Viewport Container */}
@@ -272,6 +310,7 @@ export default function App() {
             {/* 1. Executive Summary Cards */}
             <ExecutiveSummary
               totals={totals}
+              dailyChange={dailyChange}
               baseCurrency={baseCurrency}
               onToggleCurrency={setBaseCurrency}
               isRefreshing={isRefreshing}
@@ -322,7 +361,7 @@ export default function App() {
           </div>
           <div className="flex items-center gap-4 text-[11px]">
             <button
-              onClick={() => triggerDownloadStandaloneHtml(assets, rates)}
+              onClick={() => triggerDownloadStandaloneHtml(assets, rates, snapshots)}
               className="text-indigo-400 hover:text-indigo-300 transition-colors"
             >
               GitHub Pages HTML İndir
@@ -364,6 +403,7 @@ export default function App() {
         onClose={() => setIsExportModalOpen(false)}
         assets={assets}
         rates={rates}
+        snapshots={snapshots}
         onImportAssets={handleImportAssets}
       />
     </div>

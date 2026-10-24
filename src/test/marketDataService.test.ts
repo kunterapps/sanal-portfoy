@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { fetchLivePriceForAsset, parseTurkishNumber } from '../services/marketDataService';
+import { batchUpdatePortfolioPrices, fetchLivePriceForAsset, parseTurkishNumber } from '../services/marketDataService';
 import { makeAsset, RATES } from './fixtures';
 
 describe('parseTurkishNumber', () => {
@@ -35,5 +35,16 @@ describe('fetchLivePriceForAsset (offline categories)', () => {
   it('keeps the existing price for unknown cash', async () => {
     const asset = makeAsset({ category: 'CASH', symbol: 'CHF', name: 'Frank', currentPrice: 48 });
     expect(await fetchLivePriceForAsset(asset, RATES)).toEqual({ price: 48, success: false });
+  });
+});
+
+describe('batchUpdatePortfolioPrices', () => {
+  it('flags assets whose price could not be fetched and clears the flag on success', async () => {
+    const unknownCash = makeAsset({ id: 'x', category: 'CASH', symbol: 'CHF', name: 'Frank', currentPrice: 48 });
+    const gold = makeAsset({ id: 'g', category: 'COMMODITY', goldType: 'GRAM_24', symbol: 'GRAM_24', priceStale: true });
+    const result = await batchUpdatePortfolioPrices([unknownCash, gold], RATES);
+    expect(result.failedCount).toBe(1);
+    expect(result.updatedAssets[0]).toMatchObject({ currentPrice: 48, priceStale: true });
+    expect(result.updatedAssets[1]).toMatchObject({ currentPrice: 4000, priceStale: false });
   });
 });
