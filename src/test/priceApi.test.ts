@@ -1,12 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import {
-  cookieHeader,
   createPriceMiddleware,
   createPriceService,
   handlePriceRequest,
-  parseTefasFundPage,
-  parseTefasHistory,
+  parseTefasFunds,
   parseYahooChart,
 } from '../../server/priceApi';
 
@@ -39,22 +37,33 @@ describe('parseYahooChart', () => {
   });
 });
 
-describe('parseTefasHistory', () => {
+describe('parseTefasFunds', () => {
   it('picks the most recent price', () => {
-    const q = parseTefasHistory({
-      data: [
-        { TARIH: '1761177600000', FIYAT: 14.8 },
-        { TARIH: '1761264000000', FIYAT: 14.9 },
-        { TARIH: '1761091200000', FIYAT: 14.7 },
+    const q = parseTefasFunds({
+      resultList: [
+        { tarih: '2026-10-22', fonKodu: 'IJC', fiyat: 14.8 },
+        { tarih: '2026-10-23', fonKodu: 'IJC', fiyat: 14.9 },
+        { tarih: '2026-10-21', fonKodu: 'IJC', fiyat: 14.7 },
       ],
     });
-    expect(q).toEqual({ price: 14.9, currency: 'TRY', source: 'tefas', asOf: new Date(1761264000000).toISOString() });
+    expect(q).toEqual({ price: 14.9, currency: 'TRY', source: 'tefas', asOf: new Date(Date.UTC(2026, 9, 23)).toISOString() });
+  });
+
+  it('accepts other date and number formats', () => {
+    expect(parseTefasFunds({ resultList: [{ tarih: '20261023', fiyat: '1.234,5' }] })?.price).toBe(1234.5);
+    expect(parseTefasFunds({ resultList: [{ tarih: '23.10.2026', fiyat: '2.75' }] })?.price).toBe(2.75);
+    expect(parseTefasFunds({ resultList: [{ tarih: 1761264000000, fiyat: 3 }] })?.asOf).toBe(new Date(1761264000000).toISOString());
+  });
+
+  it('ignores rows for other funds', () => {
+    expect(parseTefasFunds({ resultList: [{ tarih: '2026-10-23', fonKodu: 'TMG', fiyat: 5 }] }, 'IJC')).toBeNull();
   });
 
   it('returns null without usable rows', () => {
-    expect(parseTefasHistory({ data: [] })).toBeNull();
-    expect(parseTefasHistory({ data: [{ TARIH: 'x', FIYAT: 0 }] })).toBeNull();
-    expect(parseTefasHistory(null)).toBeNull();
+    expect(parseTefasFunds({ resultList: [] })).toBeNull();
+    expect(parseTefasFunds({ resultList: [{ tarih: 'x', fiyat: 0 }] })).toBeNull();
+    expect(parseTefasFunds({ errorMessage: 'Sistem Hatası!!' })).toBeNull();
+    expect(parseTefasFunds(null)).toBeNull();
   });
 });
 
@@ -89,15 +98,14 @@ describe('createPriceService', () => {
     expect(String(fetchFn.mock.calls[1][0])).toContain('query2');
   });
 
-  it('posts the fund code and type to TEFAS', async () => {
-    const fetchFn = vi.fn(async () => jsonResponse({ data: [{ TARIH: '1761264000000', FIYAT: 0.42 }] }));
-    const service = createPriceService(fetchFn as unknown as typeof fetch, () => new Date(2026, 9, 24).getTime());
+  it('posts the fund code to the TEFAS price endpoint', async () => {
+    const fetchFn = vi.fn(async () => jsonResponse({ resultList: [{ tarih: '2026-10-23', fonKodu: 'VEB', fiyat: 0.42 }] }));
+    const service = createPriceService(fetchFn as unknown as typeof fetch);
     expect((await service.getFundQuote('veb', 'EMK'))?.price).toBe(0.42);
-    const init = (fetchFn.mock.calls[0] as unknown[])[1] as RequestInit;
+    const [url, init] = fetchFn.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe('https://www.tefas.gov.tr/api/funds/fonFiyatBilgiGetir');
     expect(init.method).toBe('POST');
-    expect(String(init.body)).toContain('fontip=EMK');
-    expect(String(init.body)).toContain('fonkod=VEB');
-    expect(String(init.body)).toContain('bittarih=24.10.2026');
+    expect(JSON.parse(String(init.body))).toEqual({ fonKodu: 'VEB', dil: 'TR', periyod: 1 });
   });
 
   it('rejects malformed symbols without calling out', async () => {
@@ -156,39 +164,16 @@ describe('createPriceMiddleware', () => {
 });
 
 describe('TEFAS fallbacks', () => {
-  const FUND_PAGE = '<ul class="top-list"><li>Son Fiyat (TL)<span>14,851234</span></li><li>Günlük Getiri (%)<span>%0,12</span></li></ul>';
-
-  it('parses the fund page price', () => {
-    expect(parseTefasFundPage(FUND_PAGE)?.price).toBe(14.851234);
-    expect(parseTefasFundPage('<li>Son Fiyat (TL)<span>1.234,50</span></li>')?.price).toBe(1234.5);
-    expect(parseTefasFundPage('<html>Request blocked</html>')).toBeNull();
-  });
-
-  it('builds a Cookie header from Set-Cookie', () => {
-    const h = new Headers();
-    h.append('Set-Cookie', 'ASP.NET_SessionId=abc; path=/; HttpOnly');
-    h.append('Set-Cookie', 'TS01=xyz; Path=/');
-    expect(cookieHeader(h)).toBe('ASP.NET_SessionId=abc; TS01=xyz');
-  });
-
-  it('retries the API with session cookies when the first call is blocked', async () => {
+  it('falls back to the fund info endpoint with type and date range', async () => {
     const fetchFn = vi
       .fn()
-      .mockResolvedValueOnce(htmlResponse('<html>The requested URL was rejected</html>'))
-      .mockResolvedValueOnce(htmlResponse('<html>page</html>', 200, { 'Set-Cookie': 'ASP.NET_SessionId=abc; path=/' }))
-      .mockResolvedValueOnce(jsonResponse({ data: [{ TARIH: '1761264000000', FIYAT: 2.5 }] }));
-    const service = createPriceService(fetchFn as unknown as typeof fetch);
-    expect((await service.getFundQuote('TCD', 'YAT'))?.price).toBe(2.5);
-    expect((fetchFn.mock.calls[2][1] as RequestInit).headers).toMatchObject({ Cookie: 'ASP.NET_SessionId=abc' });
-  });
-
-  it('falls back to the fund page', async () => {
-    const fetchFn = vi.fn(async (url: string) =>
-      url.includes('FonAnaliz') ? htmlResponse(FUND_PAGE) : htmlResponse('<html>blocked</html>', 403)
-    );
-    const service = createPriceService(fetchFn as unknown as typeof fetch);
-    expect((await service.getFundQuote('TCD', 'YAT'))?.price).toBe(14.851234);
-    expect(String(fetchFn.mock.calls.at(-1)?.[0])).toContain('FonAnaliz.aspx?FonKod=TCD');
+      .mockResolvedValueOnce(jsonResponse({ resultList: [] }))
+      .mockResolvedValueOnce(jsonResponse({ resultList: [{ tarih: '2026-10-23', fonKodu: 'VEB', fiyat: 0.5 }] }));
+    const service = createPriceService(fetchFn as unknown as typeof fetch, () => new Date(2026, 9, 24).getTime());
+    expect((await service.getFundQuote('VEB', 'EMK'))?.price).toBe(0.5);
+    const [url, init] = fetchFn.mock.calls[1] as unknown as [string, RequestInit];
+    expect(url).toBe('https://www.tefas.gov.tr/api/funds/fonGnlBlgSiraliGetir');
+    expect(JSON.parse(String(init.body))).toMatchObject({ fonTipi: 'EMK', fonKodu: 'VEB', basTarih: '20261010', bitTarih: '20261024' });
   });
 
   it('reports what each source answered when all fail', async () => {
@@ -197,7 +182,7 @@ describe('TEFAS fallbacks', () => {
     const result = await handlePriceRequest(new URL('http://x/api/fund?code=TCD'), 'GET', service);
     expect(result?.status).toBe(404);
     const details = (result?.body as { details: { source: string; status: number; note?: string }[] }).details;
-    expect(details.map((d) => d.source)).toEqual(['tefas-api', 'tefas-page']);
+    expect(details.map((d) => d.source)).toEqual(['tefas-fiyat', 'tefas-bilgi']);
     expect(details[0]).toMatchObject({ status: 403, note: 'Access denied' });
   });
 });
