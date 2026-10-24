@@ -65,16 +65,37 @@ export function parseYahooChart(data: unknown): Quote | null {
   };
 }
 
-/** Extracts the latest fund price from a TEFAS BindHistoryInfo response. */
-export function parseTefasHistory(data: unknown): Quote | null {
-  const rows = (data as { data?: unknown[] })?.data;
+/** Parses a TEFAS date: ISO / YYYY-MM-DD, YYYYMMDD, DD.MM.YYYY or epoch ms. */
+function parseTefasDate(value: unknown): number {
+  if (typeof value === 'number') return value > 1e11 ? value : NaN;
+  if (typeof value !== 'string') return NaN;
+  const v = value.trim();
+  let m = v.match(/^(\d{4})-?(\d{2})-?(\d{2})/);
+  if (m) return Date.UTC(+m[1], +m[2] - 1, +m[3]);
+  m = v.match(/^(\d{2})\.(\d{2})\.(\d{4})/);
+  if (m) return Date.UTC(+m[3], +m[2] - 1, +m[1]);
+  return /^\d{11,}$/.test(v) ? Number(v) : NaN;
+}
+
+function parseTefasPrice(value: unknown): number {
+  if (typeof value === 'number') return value;
+  if (typeof value !== 'string') return NaN;
+  const v = value.trim();
+  // Turkish formatting: 1.234,567890
+  return parseFloat(v.includes(',') ? v.replace(/\./g, '').replace(',', '.') : v);
+}
+
+/** Extracts the latest fund price from a tefas.gov.tr /api/funds/* response. */
+export function parseTefasFunds(data: unknown, fund?: string): Quote | null {
+  const rows = (data as { resultList?: unknown[] })?.resultList;
   if (!Array.isArray(rows)) return null;
   let best: { time: number; price: number } | null = null;
   for (const row of rows) {
-    const r = row as { TARIH?: string | number; FIYAT?: number | string };
-    const time = Number(r.TARIH);
-    const price = typeof r.FIYAT === 'string' ? parseFloat(r.FIYAT) : r.FIYAT;
-    if (!Number.isFinite(time) || typeof price !== 'number' || !(price > 0)) continue;
+    const r = row as { tarih?: unknown; fiyat?: unknown; fonKodu?: unknown };
+    if (fund && typeof r.fonKodu === 'string' && r.fonKodu.toUpperCase() !== fund) continue;
+    const time = parseTefasDate(r.tarih);
+    const price = parseTefasPrice(r.fiyat);
+    if (!Number.isFinite(time) || !(price > 0)) continue;
     if (!best || time > best.time) best = { time, price };
   }
   if (!best) return null;
@@ -88,14 +109,14 @@ export interface FundAttempt {
   note?: string;
 }
 
+// TEFAS retired the old BindHistoryInfo API in 2026; the site now uses these JSON endpoints.
 const TEFAS = 'https://www.tefas.gov.tr';
 const TEFAS_HEADERS = {
   'User-Agent': USER_AGENT,
-  'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
-  'X-Requested-With': 'XMLHttpRequest',
+  'Content-Type': 'application/json',
+  Accept: 'application/json, text/plain, */*',
   Origin: TEFAS,
-  Referer: `${TEFAS}/TarihselVeriler.aspx`,
-  Accept: 'application/json, text/javascript, */*; q=0.01',
+  Referer: `${TEFAS}/tr/fon-verileri`,
 };
 
 function snippet(text: string): string {
@@ -106,29 +127,8 @@ function errorNote(err: unknown): string {
   return err instanceof Error ? `${err.name}: ${err.message}`.slice(0, 120) : 'error';
 }
 
-/** Turns Set-Cookie response headers into a Cookie request header. */
-export function cookieHeader(headers: Headers): string {
-  const list =
-    typeof headers.getSetCookie === 'function'
-      ? headers.getSetCookie()
-      : (headers.get('set-cookie') || '').split(/,(?=\s*[^;,=\s]+=)/);
-  return list
-    .map((c) => c.split(';')[0].trim())
-    .filter((c) => c.includes('='))
-    .join('; ');
-}
-
-/** Reads "Son Fiyat (TL)" from a TEFAS FonAnaliz page. */
-export function parseTefasFundPage(html: string, nowMs: number = Date.now()): Quote | null {
-  const match = html.match(/Son Fiyat[^<]*(?:<[^>]+>\s*)*?([\d.]*\d,\d+)/i);
-  if (!match) return null;
-  const price = parseFloat(match[1].replace(/\./g, '').replace(',', '.'));
-  if (!(price > 0)) return null;
-  return { price, currency: 'TRY', source: 'tefas', asOf: new Date(nowMs).toISOString() };
-}
-
-function tefasDate(d: Date): string {
-  return `${String(d.getDate()).padStart(2, '0')}.${String(d.getMonth() + 1).padStart(2, '0')}.${d.getFullYear()}`;
+function compactDate(d: Date): string {
+  return `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
 }
 
 export function createPriceService(fetchFn: FetchFn = fetch, now: () => number = Date.now) {
@@ -169,25 +169,18 @@ export function createPriceService(fetchFn: FetchFn = fetch, now: () => number =
 
   async function loadFund(fund: string, kind: 'YAT' | 'EMK'): Promise<{ quote: Quote | null; attempts: FundAttempt[] }> {
     const attempts: FundAttempt[] = [];
-    // Funds price once per business day; two weeks covers weekends and holidays
-    const body = new URLSearchParams({
-      fontip: kind,
-      fonkod: fund,
-      bastarih: tefasDate(new Date(now() - 14 * 86_400_000)),
-      bittarih: tefasDate(new Date(now())),
-    }).toString();
 
-    const postHistory = async (source: string, cookie?: string) => {
+    const post = async (source: string, path: string, body: object) => {
       try {
-        const res = await fetchWithTimeout(fetchFn, `${TEFAS}/api/DB/BindHistoryInfo`, {
+        const res = await fetchWithTimeout(fetchFn, `${TEFAS}${path}`, {
           method: 'POST',
-          headers: { ...TEFAS_HEADERS, ...(cookie ? { Cookie: cookie } : {}) },
-          body,
+          headers: TEFAS_HEADERS,
+          body: JSON.stringify(body),
         });
         const text = await res.text();
         let quote: Quote | null = null;
         try {
-          quote = res.ok ? parseTefasHistory(JSON.parse(text)) : null;
+          quote = res.ok ? parseTefasFunds(JSON.parse(text), fund) : null;
         } catch {
           // Not JSON: usually a firewall / bot-check page
         }
@@ -199,37 +192,30 @@ export function createPriceService(fetchFn: FetchFn = fetch, now: () => number =
       }
     };
 
-    // 1. History API directly
-    let quote = await postHistory('tefas-api');
+    // 1. Price history for the last month
+    let quote = await post('tefas-fiyat', '/api/funds/fonFiyatBilgiGetir', { fonKodu: fund, dil: 'TR', periyod: 1 });
     if (quote) return { quote, attempts };
 
-    // 2. Same API with the session cookies the site sets on its own page
-    let cookie = '';
-    try {
-      const page = await fetchWithTimeout(fetchFn, `${TEFAS}/TarihselVeriler.aspx`, {
-        headers: { 'User-Agent': USER_AGENT, Accept: 'text/html' },
-      });
-      cookie = cookieHeader(page.headers);
-      await page.text();
-    } catch (err) {
-      attempts.push({ source: 'tefas-cookie', status: 0, ok: false, note: errorNote(err) });
-    }
-    if (cookie) {
-      quote = await postHistory('tefas-api+cookie', cookie);
-      if (quote) return { quote, attempts };
-    }
-
-    // 3. Fund analysis page, which shows the latest price
-    try {
-      const res = await fetchWithTimeout(fetchFn, `${TEFAS}/FonAnaliz.aspx?FonKod=${encodeURIComponent(fund)}`, {
-        headers: { 'User-Agent': USER_AGENT, Accept: 'text/html', ...(cookie ? { Cookie: cookie } : {}) },
-      });
-      const html = await res.text();
-      quote = res.ok ? parseTefasFundPage(html, now()) : null;
-      attempts.push({ source: 'tefas-page', status: res.status, ok: !!quote, ...(quote ? {} : { note: snippet(html) }) });
-    } catch (err) {
-      attempts.push({ source: 'tefas-page', status: 0, ok: false, note: errorNote(err) });
-    }
+    // 2. General fund info; two weeks covers weekends and holidays
+    quote = await post('tefas-bilgi', '/api/funds/fonGnlBlgSiraliGetir', {
+      fonTipi: kind,
+      fonKodu: fund,
+      aramaMetni: null,
+      fonTurKod: null,
+      fonGrubu: null,
+      sfonTurKod: null,
+      fonTurAciklama: null,
+      kurucuKod: null,
+      basTarih: compactDate(new Date(now() - 14 * 86_400_000)),
+      bitTarih: compactDate(new Date(now())),
+      basSira: 1,
+      bitSira: 100,
+      dil: 'TR',
+      sFonTurKod: '',
+      fonKod: '',
+      fonGrup: '',
+      fonUnvanTip: '',
+    });
     return { quote, attempts };
   }
 
