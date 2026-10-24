@@ -1,0 +1,9 @@
+# Cloudflare Worker for the price API (used by the GitHub Pages build).
+# Deploy: npx wrangler login && npx wrangler deploy
+name = "sanal-portfoy-fiyat"
+main = "worker/index.ts"
+compatibility_date = "2026-10-01"
+
+[vars]
+# Sites allowed to call the API (comma-separated)
+ALLOWED_ORIGINS = "https://kunterapps.github.io,http://localhost:3000"

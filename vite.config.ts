@@ -1,11 +1,28 @@
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
-import {defineConfig} from 'vite';
+import {defineConfig, type Plugin} from 'vite';
+import {createPriceMiddleware} from './server/priceApi.ts';
+
+/** Serves /api/quote and /api/fund from both the dev server and `vite preview`. */
+function priceApi(): Plugin {
+  const middleware = createPriceMiddleware();
+  return {
+    name: 'price-api',
+    configureServer(server) {
+      server.middlewares.use(middleware);
+    },
+    configurePreviewServer(server) {
+      server.middlewares.use(middleware);
+    },
+  };
+}
 
 export default defineConfig(() => {
   return {
-    plugins: [react(), tailwindcss()],
+    // GitHub Pages serves the site under /<repo>/; the deploy workflow sets this
+    base: process.env.VITE_BASE || '/',
+    plugins: [react(), tailwindcss(), priceApi()],
     resolve: {
       alias: {
         '@': path.resolve(import.meta.dirname, '.'),

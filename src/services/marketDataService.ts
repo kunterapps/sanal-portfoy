@@ -1,4 +1,4 @@
-import { ExchangeRates, PortfolioAsset } from '../types/portfolio';
+import { Currency, ExchangeRates, PortfolioAsset } from '../types/portfolio';
 import { calculateGoldUnitPrice } from '../utils/goldCalculations';
 import { crossRate, getCashUnitPrice } from '../utils/currency';
 
@@ -172,53 +172,49 @@ export async function fetchLiveExchangeRates(): Promise<ExchangeRates> {
   }
 }
 
+export interface ServerQuote {
+  price: number;
+  currency: string;
+  source: string;
+  asOf: string;
+}
+
+// Price API location: same origin in local dev/preview, the Cloudflare Worker
+// URL in the GitHub Pages build (set via VITE_PRICE_API_URL at build time).
+const PRICE_API_BASE = (import.meta.env.VITE_PRICE_API_URL || '').replace(/\/+$/, '');
+
 /**
- * Fetches Yahoo Finance price via CORS proxy
+ * Fetches a quote from the app's price API (see server/priceApi.ts),
+ * which calls Yahoo Finance / TEFAS server-side.
  */
-export async function fetchYahooQuote(symbol: string): Promise<number | null> {
-  const cleanSymbol = symbol.trim().toUpperCase();
-  const yahooUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(cleanSymbol)}?interval=1d&range=5d`;
-
-  const proxies = [
-    (url: string) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
-    (url: string) => `https://corsproxy.io/?url=${encodeURIComponent(url)}`,
-  ];
-
-  for (const getProxyUrl of proxies) {
-    try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 4500);
-
-      const targetUrl = getProxyUrl(yahooUrl);
-      const res = await fetch(targetUrl, { signal: controller.signal });
-      clearTimeout(timeoutId);
-
-      if (!res.ok) continue;
-
-      const data = await res.json();
-      const result = data?.chart?.result?.[0];
-      if (!result) continue;
-
-      const regularMarketPrice = result.meta?.regularMarketPrice;
-      if (typeof regularMarketPrice === 'number' && regularMarketPrice > 0) {
-        return regularMarketPrice;
-      }
-
-      // Check last quote close
-      const closes = result.indicators?.quote?.[0]?.close;
-      if (Array.isArray(closes)) {
-        for (let i = closes.length - 1; i >= 0; i--) {
-          if (typeof closes[i] === 'number' && closes[i] > 0) {
-            return closes[i];
-          }
-        }
-      }
-    } catch {
-      // Try next proxy
-    }
+async function fetchServerQuote(path: string): Promise<ServerQuote | null> {
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 12000);
+    const res = await fetch(`${PRICE_API_BASE}${path}`, { signal: controller.signal });
+    clearTimeout(timeoutId);
+    if (!res.ok) return null;
+    const data = await res.json();
+    return typeof data?.price === 'number' && data.price > 0 ? data : null;
+  } catch {
+    return null;
   }
+}
 
-  return null;
+export function fetchStockQuote(symbol: string): Promise<ServerQuote | null> {
+  return fetchServerQuote(`/api/quote?symbol=${encodeURIComponent(symbol.trim().toUpperCase())}`);
+}
+
+export function fetchFundQuote(code: string, kind: 'YAT' | 'EMK'): Promise<ServerQuote | null> {
+  return fetchServerQuote(`/api/fund?code=${encodeURIComponent(code.trim().toUpperCase())}&kind=${kind}`);
+}
+
+const KNOWN_CURRENCIES: Currency[] = ['TRY', 'USD', 'EUR', 'GBP'];
+
+/** Converts a quote into the asset's price currency when both are known. */
+export function quoteInCurrency(quote: ServerQuote, target: Currency, rates: ExchangeRates): number {
+  const from = quote.currency as Currency;
+  return KNOWN_CURRENCIES.includes(from) ? quote.price * crossRate(from, target, rates) : quote.price;
 }
 
 /**
@@ -254,14 +250,14 @@ export async function fetchLivePriceForAsset(
       const symbolWithSuffix = asset.symbol.toUpperCase().endsWith('.IS') 
         ? asset.symbol.toUpperCase() 
         : `${asset.symbol.toUpperCase()}.IS`;
-      const price = await fetchYahooQuote(symbolWithSuffix);
-      if (price !== null) return { price, success: true };
+      const quote = await fetchStockQuote(symbolWithSuffix);
+      if (quote) return { price: quoteInCurrency(quote, asset.currentCurrency, rates), success: true };
     }
 
     // 4. Foreign Stocks & ETFs (NVDA, VWCE.DE, CSPX.L etc.)
     if (asset.category === 'FOREIGN_STOCK') {
-      const price = await fetchYahooQuote(asset.symbol);
-      if (price !== null) return { price, success: true };
+      const quote = await fetchStockQuote(asset.symbol);
+      if (quote) return { price: quoteInCurrency(quote, asset.currentCurrency, rates), success: true };
     }
 
     // 5. TEFAS & BEFAS Funds (Automatic Live Price Fetching)
@@ -269,38 +265,8 @@ export async function fetchLivePriceForAsset(
       const fundCode = asset.symbol.trim().toUpperCase();
       const kind = asset.category === 'BEFAS' ? 'EMK' : 'YAT';
 
-      // 5.1 Try live Fontakip / TEFAS JSON endpoint via CORS proxies
-      const candidateUrls = [
-        `https://fontakip.com/api/fund/${encodeURIComponent(fundCode)}`,
-        `https://corsproxy.io/?url=${encodeURIComponent(`https://www.tefas.gov.tr/api/funds?name=${fundCode}&kind=${kind}`)}`,
-        `https://api.allorigins.win/raw?url=${encodeURIComponent(`https://fontakip.com/api/fund/${fundCode}`)}`,
-      ];
-
-      for (const targetUrl of candidateUrls) {
-        try {
-          const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 4000);
-          const res = await fetch(targetUrl, { signal: controller.signal });
-          clearTimeout(timeoutId);
-
-          if (res.ok) {
-            const data = await res.json();
-            // Handle various JSON schemas
-            const livePrice = 
-              typeof data?.price === 'number' ? data.price :
-              typeof data?.fiyat === 'number' ? data.fiyat :
-              typeof data?.fund?.current_price === 'number' ? data.fund.current_price :
-              Array.isArray(data) && data[0]?.price ? data[0].price :
-              Array.isArray(data?.data) && data.data[0]?.price ? data.data[0].price : null;
-
-            if (livePrice && livePrice > 0) {
-              return { price: livePrice, success: true };
-            }
-          }
-        } catch {
-          // Continue to next live candidate
-        }
-      }
+      const quote = await fetchFundQuote(fundCode, kind);
+      if (quote) return { price: quoteInCurrency(quote, asset.currentCurrency, rates), success: true };
     }
 
     // 6. Cryptocurrencies (BTC, ETH, SOL, AVAX, etc.)
@@ -330,11 +296,8 @@ export async function fetchLivePriceForAsset(
       }
 
       // 6.2 Yahoo Finance fallback (BTC-USD, ETH-USD)
-      const yahooPrice = await fetchYahooQuote(`${sym}-USD`);
-      if (yahooPrice !== null && yahooPrice > 0) {
-        const finalPrice = yahooPrice * crossRate('USD', asset.currentCurrency, rates);
-        return { price: finalPrice, success: true };
-      }
+      const quote = await fetchStockQuote(`${sym}-USD`);
+      if (quote) return { price: quoteInCurrency(quote, asset.currentCurrency, rates), success: true };
     }
   } catch (err) {
     console.warn(`Could not update price for ${asset.symbol}:`, err);

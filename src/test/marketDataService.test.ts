@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { batchUpdatePortfolioPrices, fetchLivePriceForAsset, parseTurkishNumber } from '../services/marketDataService';
+import { batchUpdatePortfolioPrices, fetchLivePriceForAsset, parseTurkishNumber, quoteInCurrency } from '../services/marketDataService';
 import { makeAsset, RATES } from './fixtures';
 
 describe('parseTurkishNumber', () => {
@@ -46,5 +46,14 @@ describe('batchUpdatePortfolioPrices', () => {
     expect(result.failedCount).toBe(1);
     expect(result.updatedAssets[0]).toMatchObject({ currentPrice: 48, priceStale: true });
     expect(result.updatedAssets[1]).toMatchObject({ currentPrice: 4000, priceStale: false });
+  });
+});
+
+describe('quoteInCurrency', () => {
+  it('converts a quote into the asset currency', () => {
+    const q = { price: 10, currency: 'EUR', source: 'yahoo', asOf: '' };
+    expect(quoteInCurrency(q, 'TRY', RATES)).toBe(440);
+    expect(quoteInCurrency(q, 'EUR', RATES)).toBe(10);
+    expect(quoteInCurrency({ ...q, currency: 'JPY' }, 'TRY', RATES)).toBe(10);
   });
 });

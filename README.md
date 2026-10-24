@@ -13,13 +13,17 @@ npm install
 npm run dev      # http://localhost:3000
 ```
 
+Yerelde fiyat API'si Vite'ın içinde çalışır, ayrıca bir şey kurmak gerekmez. Yayın için aşağıdaki "GitHub Pages'de yayınlama" bölümüne bakın.
+
 ## Komutlar
 
 | Komut | Açıklama |
 | --- | --- |
 | `npm run dev` | Geliştirme sunucusu |
 | `npm run build` | `dist/` klasörüne üretim derlemesi |
-| `npm run preview` | Derlenmiş uygulamayı yerelde açar |
+| `npm start` | Derlenmiş uygulamayı fiyat API'siyle birlikte 3000 portunda sunar |
+| `npm run worker:deploy` | Fiyat API'sini Cloudflare Worker olarak yayınlar |
+| `npm run preview` | Derlenmiş uygulamayı yerelde açar (fiyat API'si dahil) |
 | `npm run lint` | TypeScript tip kontrolü |
 | `npm test` | Birim testleri (Vitest) |
 
@@ -33,16 +37,39 @@ src/
   types/        Ortak tipler
   data/         Örnek portföy
   test/         Birim testleri
+server/
+  priceApi.ts   Fiyat API'si (/api/quote, /api/fund); yerelde Vite, yayında Worker kullanır
+worker/
+  index.ts      Cloudflare Worker girişi
 ```
 
 ## Fiyat kaynakları
 
 - **Döviz ve altın:** finans.truncgil.com, ulaşılamazsa Binance (PAXG) ve open.er-api.com.
-- **BIST ve yabancı hisseler:** Yahoo Finance, herkese açık CORS proxy'leri üzerinden.
-- **TEFAS/BEFAS:** birkaç deneme uç noktası.
-- **Kripto:** Binance, ulaşılamazsa Yahoo Finance.
+- **BIST ve yabancı hisseler:** Yahoo Finance, uygulamanın kendi sunucusu üzerinden (`/api/quote`). Fiyat varlığın para birimine çevrilir (ör. EUR işlem gören bir ETF TRY ile takip ediliyorsa).
+- **TEFAS/BEFAS:** tefas.gov.tr, uygulamanın kendi sunucusu üzerinden (`/api/fund`).
+- **Kripto:** Binance, ulaşılamazsa Yahoo Finance (sunucu üzerinden).
 
-Hisse ve fon fiyatları üçüncü taraf proxy'lere bağlı olduğundan her zaman alınamayabilir. Fiyatı alınamayan varlık son bilinen fiyatıyla kalır ve tabloda "Eski fiyat" olarak işaretlenir.
+Sunucu sonuçları önbelleğe alır (hisseler 1 dk, fonlar 10 dk). Fiyatı alınamayan varlık son bilinen fiyatıyla kalır ve tabloda "Eski fiyat" olarak işaretlenir.
+
+Fiyat API'si yerelde `npm run dev` / `npm run preview` içinde, yayında Cloudflare Worker'da çalışır. Worker adresi tanımlanmadan yayınlanan bir sitede hisse ve fon fiyatları güncellenmez; döviz, altın ve kripto güncellenmeye devam eder.
+
+## GitHub Pages'de yayınlama
+
+Site GitHub Pages'de, hisse/fon fiyat API'si ücretsiz bir Cloudflare Worker'da çalışır (ücretsiz katman günde 100.000 istek). Kurulum bir kez yapılır:
+
+1. **Pages'i açın:** GitHub'da repo › Settings › Pages › "Build and deployment" altında Source olarak **GitHub Actions** seçin.
+2. **Worker'ı yayınlayın:** [cloudflare.com](https://dash.cloudflare.com/sign-up) üzerinden ücretsiz hesap açın, sonra repo klasöründe:
+   ```bash
+   npx wrangler@4 login     # tarayıcıda Cloudflare girişi
+   npm run worker:deploy    # çıktıda https://sanal-portfoy-fiyat.<hesap>.workers.dev adresi yazar
+   ```
+3. **Adresi tanıtın:** repo › Settings › Secrets and variables › Actions › **Variables** sekmesinde `PRICE_API_URL` adında bir değişken oluşturup Worker adresini yazın.
+4. **Yayınlayın:** Actions sekmesinde "GitHub Pages" iş akışını çalıştırın (sonraki her `main` güncellemesinde kendiliğinden çalışır). Site `https://kunterapps.github.io/sanal-portfoy/` adresinde açılır.
+
+Worker yalnızca `wrangler.toml` içindeki `ALLOWED_ORIGINS` listesindeki sitelerden gelen istekleri kabul eder. Siteyi başka bir adreste yayınlarsanız bu listeye ekleyip `npm run worker:deploy` ile yeniden yayınlayın.
+
+Veriler yine yalnızca tarayıcınızda tutulur; Worker sadece sorulan sembolün fiyatını döndürür, portföy bilgisi saklamaz.
 
 ## Alış / satış işlemleri
 
