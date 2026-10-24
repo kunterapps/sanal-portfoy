@@ -81,8 +81,6 @@ Tablodaki ⇄ butonu bir varlığa alış veya satış işlemi eklemeyi ve işle
 - İşlemler tarih sırasıyla yeniden hesaplanır; o tarihte eldekinden fazla satış kabul edilmez.
 - Bu özellikten önce eklenmiş varlıklar otomatik olarak tek bir "Açılış kaydı" alışına dönüştürülür.
 
-Tek dosya HTML sürümü işlem geçmişini taşır ama işlem ekleme arayüzü yalnızca ana uygulamadadır.
-
 ## Değer geçmişi
 
 Uygulama her gün portföyün toplam değerini ve maliyetini bir kez kaydeder (aynı gün içindeki son değer geçerlidir). "Zaman İçinde Değer Değişimi" grafiği ve "Son Kayıttan Bu Yana Değişim" kartı bu kayıtlardan hesaplanır. Değişim kâr/zarar üzerinden ölçüldüğü için yeni varlık eklemek kazanç gibi görünmez. Kayıtlar JSON yedeğine de dahildir.
