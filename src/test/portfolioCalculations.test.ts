@@ -76,4 +76,13 @@ describe('portfolio summaries', () => {
     const byCurrency = Object.fromEntries(calculateCurrencySummaries(metals, RATES).map((c) => [c.currency, c.valueTRY]));
     expect(byCurrency).toEqual({ USD: 5500 });
   });
+
+  it('splits funds by their foreign-currency share', () => {
+    const funds = [
+      makeAsset({ id: 'f1', category: 'TEFAS', symbol: 'AFT', quantity: 1, currentPrice: 1000, fxExposurePct: 80 }),
+      makeAsset({ id: 'f2', category: 'BEFAS', symbol: 'AH1', quantity: 1, currentPrice: 500 }),
+    ];
+    const byCurrency = Object.fromEntries(calculateCurrencySummaries(funds, RATES).map((c) => [c.currency, c.valueTRY]));
+    expect(byCurrency).toEqual({ TRY: 700, USD: 800 });
+  });
 });

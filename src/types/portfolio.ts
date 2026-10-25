@@ -52,6 +52,8 @@ export interface PortfolioAsset {
   transactions?: AssetTransaction[];
   /** Realized P/L from sales in costCurrency, derived from transactions */
   realizedProfit?: number;
+  /** TEFAS/BEFAS funds: share of the fund's portfolio in FX, gold or foreign securities (0–100) */
+  fxExposurePct?: number;
 }
 
 export interface ExchangeRates {
