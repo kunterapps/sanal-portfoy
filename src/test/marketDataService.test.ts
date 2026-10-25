@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { batchUpdatePortfolioPrices, fetchLivePriceForAsset, fundPricedToday, needsFxExposure, parseTurkishNumber, quoteInCurrency } from '../services/marketDataService';
+import { batchUpdatePortfolioPrices, fetchLivePriceForAsset, fundPricedToday, hasPlaceholderName, needsFxExposure, tidyAssetName, parseTurkishNumber, quoteInCurrency } from '../services/marketDataService';
 import { makeAsset, RATES } from './fixtures';
 
 describe('parseTurkishNumber', () => {
@@ -117,5 +117,21 @@ describe('needsFxExposure', () => {
     ).toBe(true);
     expect(needsFxExposure(makeAsset({ category: 'TEFAS', fxExposurePct: 40 }), now)).toBe(true);
     expect(needsFxExposure(makeAsset({ category: 'BIST' }), now)).toBe(false);
+  });
+});
+
+describe('asset names', () => {
+  it('spots stocks and funds that only show their code', () => {
+    expect(hasPlaceholderName(makeAsset({ symbol: 'MGROS', name: 'MGROS' }))).toBe(true);
+    expect(hasPlaceholderName(makeAsset({ category: 'FOREIGN_STOCK', symbol: 'APLIB', name: 'APLIB.F' }))).toBe(true);
+    expect(hasPlaceholderName(makeAsset({ category: 'TEFAS', symbol: 'IJC', name: '' }))).toBe(true);
+    expect(hasPlaceholderName(makeAsset({ symbol: 'SISE', name: 'Türkiye Şişe ve Cam' }))).toBe(false);
+    expect(hasPlaceholderName(makeAsset({ category: 'CRYPTO', symbol: 'BTC', name: 'BTC' }))).toBe(false);
+  });
+
+  it('turns all-caps names into Turkish title case and keeps mixed case', () => {
+    expect(tidyAssetName('İŞ PORTFÖY YABANCI HİSSE SENEDİ FONU')).toBe('İş Portföy Yabancı Hisse Senedi Fonu');
+    expect(tidyAssetName('TEKNOLOJİ VE  İNOVASYON')).toBe('Teknoloji ve İnovasyon');
+    expect(tidyAssetName('Migros Ticaret A.S.')).toBe('Migros Ticaret A.S.');
   });
 });

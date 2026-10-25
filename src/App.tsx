@@ -21,7 +21,10 @@ import {
   fetchLiveExchangeRates, 
   batchUpdatePortfolioPrices, 
   fetchFundFxExposure,
+  fetchStockQuote,
+  hasPlaceholderName,
   needsFxExposure,
+  tidyAssetName,
   DEFAULT_EXCHANGE_RATES 
 } from './services/marketDataService';
 import { 
@@ -152,22 +155,37 @@ export default function App() {
     };
   }, []);
 
-  // Load missing or week-old fund foreign-currency shares on startup, so the
-  // currency risk card doesn't wait for a manual price refresh
+  // On startup, load missing or week-old fund foreign-currency shares and the
+  // real names of stocks/funds entered by code only, so neither waits for a
+  // manual price refresh
   useEffect(() => {
     let mounted = true;
-    const funds = assets.filter((a) => needsFxExposure(a));
-    if (funds.length === 0) return;
+    const todo = assets.filter((a) => needsFxExposure(a) || hasPlaceholderName(a));
+    if (todo.length === 0) return;
+    type Found = { fxPct?: number; name?: string } | null;
     Promise.all(
-      funds.map(async (a) => [a.id, await fetchFundFxExposure(a.symbol, a.category === 'BEFAS' ? 'EMK' : 'YAT')] as const)
+      todo.map(async (a): Promise<[string, Found]> => {
+        if (a.category === 'TEFAS' || a.category === 'BEFAS') {
+          const fx = await fetchFundFxExposure(a.symbol, a.category === 'BEFAS' ? 'EMK' : 'YAT');
+          return [a.id, fx ? { fxPct: fx.fxPct, name: fx.name } : null];
+        }
+        const sym = a.category === 'BIST' && !/\.IS$/i.test(a.symbol) ? `${a.symbol}.IS` : a.symbol;
+        const quote = await fetchStockQuote(sym);
+        return [a.id, quote?.name ? { name: quote.name } : null];
+      })
     ).then((results) => {
-      const byId = new Map(results.filter(([, pct]) => pct !== null) as [string, number][]);
+      const byId = new Map(results.filter((r) => r[1] !== null));
       if (!mounted || byId.size === 0) return;
       const fetchedAt = new Date().toISOString();
       setAssets((prev) =>
-        prev.map((a) =>
-          byId.has(a.id) ? { ...a, fxExposurePct: byId.get(a.id), fxExposureUpdatedAt: fetchedAt } : a
-        )
+        prev.map((a) => {
+          const found = byId.get(a.id);
+          if (!found) return a;
+          let next = a;
+          if (found.fxPct !== undefined) next = { ...next, fxExposurePct: found.fxPct, fxExposureUpdatedAt: fetchedAt };
+          if (found.name && hasPlaceholderName(a)) next = { ...next, name: tidyAssetName(found.name) };
+          return next;
+        })
       );
     });
     return () => {

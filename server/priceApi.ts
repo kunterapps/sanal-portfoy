@@ -13,6 +13,8 @@ export interface Quote {
   source: 'yahoo' | 'tefas';
   /** Source timestamp, ISO */
   asOf: string;
+  /** Company or fund name when the source reports one */
+  name?: string;
 }
 
 type FetchFn = typeof fetch;
@@ -37,7 +39,13 @@ async function fetchWithTimeout(fetchFn: FetchFn, url: string, init: RequestInit
 export function parseYahooChart(data: unknown): Quote | null {
   const result = (data as { chart?: { result?: unknown[] } })?.chart?.result?.[0] as
     | {
-        meta?: { regularMarketPrice?: number; currency?: string; regularMarketTime?: number };
+        meta?: {
+          regularMarketPrice?: number;
+          currency?: string;
+          regularMarketTime?: number;
+          longName?: string;
+          shortName?: string;
+        };
         indicators?: { quote?: { close?: (number | null)[] }[] };
       }
     | undefined;
@@ -57,11 +65,13 @@ export function parseYahooChart(data: unknown): Quote | null {
     currency = 'GBP';
   }
   const time = result.meta?.regularMarketTime;
+  const name = (result.meta?.longName || result.meta?.shortName || '').trim();
   return {
     price,
     currency: currency.toUpperCase(),
     source: 'yahoo',
     asOf: typeof time === 'number' ? new Date(time * 1000).toISOString() : new Date().toISOString(),
+    ...(name && { name }),
   };
 }
 
@@ -89,17 +99,24 @@ function parseTefasPrice(value: unknown): number {
 export function parseTefasFunds(data: unknown, fund?: string): Quote | null {
   const rows = (data as { resultList?: unknown[] })?.resultList;
   if (!Array.isArray(rows)) return null;
-  let best: { time: number; price: number } | null = null;
+  let best: { time: number; price: number; name?: string } | null = null;
   for (const row of rows) {
-    const r = row as { tarih?: unknown; fiyat?: unknown; fonKodu?: unknown };
+    const r = row as { tarih?: unknown; fiyat?: unknown; fonKodu?: unknown; fonUnvan?: unknown };
     if (fund && typeof r.fonKodu === 'string' && r.fonKodu.toUpperCase() !== fund) continue;
     const time = parseTefasDate(r.tarih);
     const price = parseTefasPrice(r.fiyat);
     if (!Number.isFinite(time) || !(price > 0)) continue;
-    if (!best || time > best.time) best = { time, price };
+    const name = typeof r.fonUnvan === 'string' && r.fonUnvan.trim() ? r.fonUnvan.trim() : undefined;
+    if (!best || time > best.time) best = { time, price, name };
   }
   if (!best) return null;
-  return { price: best.price, currency: 'TRY', source: 'tefas', asOf: new Date(best.time).toISOString() };
+  return {
+    price: best.price,
+    currency: 'TRY',
+    source: 'tefas',
+    asOf: new Date(best.time).toISOString(),
+    ...(best.name && { name: best.name }),
+  };
 }
 
 /**
@@ -121,6 +138,8 @@ export interface FundAllocation {
   fxPct: number;
   source: 'tefas';
   asOf: string;
+  /** Fund's full name (fonUnvan) */
+  name?: string;
 }
 
 /** Latest foreign-currency share per fund code in a dagilimSiraliGetirT response. */
@@ -143,10 +162,12 @@ export function parseTefasAllocations(data: unknown): Map<string, FundAllocation
       const v = parseTefasPrice(row[key]);
       return Number.isFinite(v) && v > 0 ? sum + v : sum;
     }, 0);
+    const name = typeof row.fonUnvan === 'string' ? row.fonUnvan.trim() : '';
     result.set(code, {
       fxPct: Math.round(Math.min(100, fxPct) * 10) / 10,
       source: 'tefas',
       asOf: new Date(time).toISOString(),
+      ...(name && { name }),
     });
   }
   return result;
