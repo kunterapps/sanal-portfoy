@@ -123,28 +123,38 @@ export interface FundAllocation {
   asOf: string;
 }
 
-/** Extracts the latest foreign-currency share from a dagilimSiraliGetirT response. */
-export function parseTefasAllocation(data: unknown, fund?: string): FundAllocation | null {
+/** Latest foreign-currency share per fund code in a dagilimSiraliGetirT response. */
+export function parseTefasAllocations(data: unknown): Map<string, FundAllocation> {
+  const latest = new Map<string, { time: number; row: Record<string, unknown> }>();
   const rows = (data as { resultList?: unknown[] })?.resultList;
-  if (!Array.isArray(rows)) return null;
-  let best: { time: number; row: Record<string, unknown> } | null = null;
+  if (!Array.isArray(rows)) return new Map();
   for (const row of rows) {
     const r = row as Record<string, unknown>;
-    if (fund && typeof r.fonKodu === 'string' && r.fonKodu.toUpperCase() !== fund) continue;
+    if (typeof r.fonKodu !== 'string') continue;
+    const code = r.fonKodu.trim().toUpperCase();
     const time = parseTefasDate(r.tarih);
     if (!Number.isFinite(time)) continue;
-    if (!best || time > best.time) best = { time, row: r };
+    const prev = latest.get(code);
+    if (!prev || time > prev.time) latest.set(code, { time, row: r });
   }
-  if (!best) return null;
-  const fxPct = FX_ALLOCATION_FIELDS.reduce((sum, key) => {
-    const v = parseTefasPrice(best.row[key]);
-    return Number.isFinite(v) && v > 0 ? sum + v : sum;
-  }, 0);
-  return {
-    fxPct: Math.round(Math.min(100, fxPct) * 10) / 10,
-    source: 'tefas',
-    asOf: new Date(best.time).toISOString(),
-  };
+  const result = new Map<string, FundAllocation>();
+  for (const [code, { time, row }] of latest) {
+    const fxPct = FX_ALLOCATION_FIELDS.reduce((sum, key) => {
+      const v = parseTefasPrice(row[key]);
+      return Number.isFinite(v) && v > 0 ? sum + v : sum;
+    }, 0);
+    result.set(code, {
+      fxPct: Math.round(Math.min(100, fxPct) * 10) / 10,
+      source: 'tefas',
+      asOf: new Date(time).toISOString(),
+    });
+  }
+  return result;
+}
+
+/** Latest foreign-currency share of one fund in a dagilimSiraliGetirT response. */
+export function parseTefasAllocation(data: unknown, fund: string): FundAllocation | null {
+  return parseTefasAllocations(data).get(fund.trim().toUpperCase()) ?? null;
 }
 
 export interface FundAttempt {
@@ -177,7 +187,7 @@ function compactDate(d: Date): string {
 }
 
 /** Request body for TEFAS's sorted fund lists; two weeks covers weekends and holidays. */
-function fundListBody(fund: string, kind: 'YAT' | 'EMK', nowMs: number) {
+function fundListBody(fund: string, kind: 'YAT' | 'EMK', nowMs: number, days = 14, maxRows = 100) {
   return {
     fonTipi: kind,
     fonKodu: fund,
@@ -187,10 +197,10 @@ function fundListBody(fund: string, kind: 'YAT' | 'EMK', nowMs: number) {
     sfonTurKod: null,
     fonTurAciklama: null,
     kurucuKod: null,
-    basTarih: compactDate(new Date(nowMs - 14 * 86_400_000)),
+    basTarih: compactDate(new Date(nowMs - days * 86_400_000)),
     bitTarih: compactDate(new Date(nowMs)),
     basSira: 1,
-    bitSira: 100,
+    bitSira: maxRows,
     dil: 'TR',
     sFonTurKod: '',
     fonKod: '',
@@ -286,26 +296,45 @@ export function createPriceService(fetchFn: FetchFn = fetch, now: () => number =
   }
 
   const allocationCache = new Map<string, { expires: number; value: FundAllocation | null }>();
+  const ALLOCATION_TTL = 6 * 3_600_000;
 
-  /** Foreign-currency share of a fund's portfolio; TEFAS updates it daily. */
+  /**
+   * Foreign-currency share of a fund's portfolio; TEFAS updates it daily.
+   * TEFAS may ignore the fund filter and return every fund of the type, so
+   * ask one day at a time (walking back over weekends and holidays) with no
+   * row cap, and cache every fund in the answer.
+   */
   async function getFundAllocation(code: string, kind: 'YAT' | 'EMK'): Promise<FundAllocation | null> {
     const fund = code.trim().toUpperCase();
     if (!FUND_RE.test(fund)) return null;
     const key = `${kind}:${fund}`;
     const hit = allocationCache.get(key);
     if (hit && hit.expires > now()) return hit.value;
+
     let value: FundAllocation | null = null;
-    try {
-      const res = await fetchWithTimeout(fetchFn, `${TEFAS}/api/funds/dagilimSiraliGetirT`, {
-        method: 'POST',
-        headers: TEFAS_HEADERS,
-        body: JSON.stringify(fundListBody(fund, kind, now())),
-      });
-      if (res.ok) value = parseTefasAllocation(await res.json(), fund);
-    } catch {
-      // Not JSON or unreachable; treated as unknown
+    for (let back = 0; back < 7 && !value; back++) {
+      const day = now() - back * 86_400_000;
+      let found: Map<string, FundAllocation>;
+      try {
+        const res = await fetchWithTimeout(fetchFn, `${TEFAS}/api/funds/dagilimSiraliGetirT`, {
+          method: 'POST',
+          headers: TEFAS_HEADERS,
+          body: JSON.stringify(fundListBody(fund, kind, day, 0, 100_000)),
+        }, 15_000);
+        if (!res.ok) break;
+        found = parseTefasAllocations(await res.json());
+      } catch {
+        // Not JSON or unreachable; treated as unknown
+        break;
+      }
+      for (const [c, alloc] of found) {
+        allocationCache.set(`${kind}:${c}`, { value: alloc, expires: now() + ALLOCATION_TTL });
+      }
+      value = found.get(fund) ?? null;
+      // A full list for that day without this fund means it isn't of this type
+      if (!value && found.size > 1) break;
     }
-    allocationCache.set(key, { value, expires: now() + (value ? 6 * 3_600_000 : 60_000) });
+    allocationCache.set(key, { value, expires: now() + (value ? ALLOCATION_TTL : 60_000) });
     return value;
   }
 

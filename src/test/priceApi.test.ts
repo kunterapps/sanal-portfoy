@@ -184,9 +184,28 @@ describe('fund allocation', () => {
     expect(result).toMatchObject({ status: 200, body: { fxPct: 90 } });
     const [url, init] = fetchFn.mock.calls[0] as unknown as [string, RequestInit];
     expect(url).toBe('https://www.tefas.gov.tr/api/funds/dagilimSiraliGetirT');
-    expect(JSON.parse(String(init.body))).toMatchObject({ fonTipi: 'YAT', fonKodu: 'AFT', basTarih: '20261010' });
+    expect(JSON.parse(String(init.body))).toMatchObject({ fonTipi: 'YAT', fonKodu: 'AFT', basTarih: '20261024', bitTarih: '20261024', bitSira: 100000 });
     await service.getFundAllocation('AFT', 'YAT');
     expect(fetchFn).toHaveBeenCalledTimes(1);
+  });
+
+  it('walks back over empty days and caches every fund in a full list', async () => {
+    const fetchFn = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ resultList: [] }))
+      .mockResolvedValueOnce(
+        jsonResponse({
+          resultList: [
+            { fonKodu: 'AAA', tarih: '2026-10-23', yhs: 10 },
+            { fonKodu: 'TTE', tarih: '2026-10-23', yhs: 40, eut: 2 },
+          ],
+        })
+      );
+    const service = createPriceService(fetchFn as unknown as typeof fetch, () => new Date(2026, 9, 24).getTime());
+    expect((await service.getFundAllocation('TTE', 'YAT'))?.fxPct).toBe(42);
+    expect(JSON.parse(String((fetchFn.mock.calls[1] as unknown as [string, RequestInit])[1].body)).basTarih).toBe('20261023');
+    expect((await service.getFundAllocation('AAA', 'YAT'))?.fxPct).toBe(10);
+    expect(fetchFn).toHaveBeenCalledTimes(2);
   });
 });
 
