@@ -147,7 +147,7 @@ export const DistributionCharts: React.FC<DistributionChartsProps> = ({
             <span className="text-xs text-slate-500">Kur Maruziyeti</span>
           </div>
           <p className="text-sm text-slate-400 mb-6">
-            Portföyünüzün TRY, USD, EUR ve GBP para birimlerindeki pozisyon dengesi
+            Portföyünüzün TRY, USD, EUR ve GBP para birimlerindeki pozisyon dengesi. Altın, TL fiyatlı olsa da USD sayılır.
           </p>
 
           {currencySummaries.length === 0 ? (

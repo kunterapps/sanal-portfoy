@@ -187,6 +187,17 @@ export function calculateCategorySummaries(
 }
 
 /**
+ * Currency an asset is actually exposed to. CASH is detected from its
+ * symbol/name; every gold type tracks the USD ounce price even when priced in
+ * TRY; everything else follows its price currency.
+ */
+export function getExposureCurrency(asset: PortfolioAsset): Currency {
+  if (asset.category === 'CASH') return detectCashCurrency(asset) || asset.currentCurrency;
+  if (asset.category === 'COMMODITY' && asset.goldType && asset.goldType !== 'GUMUS_GRAM') return 'USD';
+  return asset.currentCurrency;
+}
+
+/**
  * Computes currency risk breakdown
  */
 export function calculateCurrencySummaries(
@@ -199,9 +210,7 @@ export function calculateCurrencySummaries(
   const summaries = currencies.map((curr) => {
     let valueTRY = 0;
     assets.forEach((asset) => {
-      const expCurr: Currency =
-        (asset.category === 'CASH' && detectCashCurrency(asset)) || asset.currentCurrency;
-      if (expCurr === curr) {
+      if (getExposureCurrency(asset) === curr) {
         const pl = getAssetProfitLoss(asset, rates);
         valueTRY += pl.valueTRY;
       }
