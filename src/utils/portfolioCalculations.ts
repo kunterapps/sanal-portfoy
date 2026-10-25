@@ -188,12 +188,12 @@ export function calculateCategorySummaries(
 
 /**
  * Currency an asset is actually exposed to. CASH is detected from its
- * symbol/name; every gold type tracks the USD ounce price even when priced in
+ * symbol/name; gold and silver track USD ounce prices even when priced in
  * TRY; everything else follows its price currency.
  */
 export function getExposureCurrency(asset: PortfolioAsset): Currency {
   if (asset.category === 'CASH') return detectCashCurrency(asset) || asset.currentCurrency;
-  if (asset.category === 'COMMODITY' && asset.goldType && asset.goldType !== 'GUMUS_GRAM') return 'USD';
+  if (asset.category === 'COMMODITY' && asset.goldType) return 'USD';
   return asset.currentCurrency;
 }
 
