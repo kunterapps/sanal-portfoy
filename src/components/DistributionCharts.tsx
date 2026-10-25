@@ -42,9 +42,9 @@ export const DistributionCharts: React.FC<DistributionChartsProps> = ({
   });
 
   return (
-    <section className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <section className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
       {/* 1. Varlık Sınıfı Dağılımı */}
-      <div className="bg-[#0f172a] border border-slate-800 rounded-2xl p-6 flex flex-col justify-between">
+      <div className="bg-[#0f172a] border border-slate-800 rounded-2xl p-4 sm:p-6 flex flex-col justify-between">
         <div>
           <div className="flex items-center justify-between mb-1">
             <h3 className="text-base font-semibold text-white">Varlık Sınıfı Dağılımı</h3>
@@ -140,7 +140,7 @@ export const DistributionCharts: React.FC<DistributionChartsProps> = ({
       </div>
 
       {/* 2. Döviz Riski Dağılımı */}
-      <div className="bg-[#0f172a] border border-slate-800 rounded-2xl p-6 flex flex-col justify-between">
+      <div className="bg-[#0f172a] border border-slate-800 rounded-2xl p-4 sm:p-6 flex flex-col justify-between">
         <div>
           <div className="flex items-center justify-between mb-1">
             <h3 className="text-base font-semibold text-white">Döviz Riski Dağılımı</h3>

@@ -61,9 +61,9 @@ export const ExecutiveSummary: React.FC<ExecutiveSummaryProps> = ({
     : 'Canlı';
 
   return (
-    <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+    <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
       {/* 1. Toplam Portföy Değeri */}
-      <div className="bg-[#0f172a] border border-slate-800 rounded-2xl p-5 relative overflow-hidden flex flex-col justify-between">
+      <div className="bg-[#0f172a] border border-slate-800 rounded-2xl p-4 sm:p-5 relative overflow-hidden flex flex-col justify-between">
         <div>
           <div className="flex items-center justify-between gap-2 h-6 text-sm text-slate-400 font-medium whitespace-nowrap mb-3">
             <span className="truncate">Portföy Değeri</span>
@@ -99,14 +99,14 @@ export const ExecutiveSummary: React.FC<ExecutiveSummaryProps> = ({
           </div>
         </div>
 
-        <div className="text-sm text-slate-400 mt-4 pt-3 h-[3.75rem] border-t border-slate-800/80 flex items-start justify-between gap-3 tabular-nums">
+        <div className="text-sm text-slate-400 mt-3 sm:mt-4 pt-3 sm:h-[3.75rem] border-t border-slate-800/80 flex items-start justify-between gap-3 tabular-nums">
           <span className="text-slate-500">Çift Kur Karşılığı</span>
           <span className="text-slate-300 font-semibold">{formatCurrency(secondaryValue, secondaryCurrency, 2)}</span>
         </div>
       </div>
 
       {/* 2. Toplam Kâr / Zarar */}
-      <div className="bg-[#0f172a] border border-slate-800 rounded-2xl p-5 flex flex-col justify-between">
+      <div className="bg-[#0f172a] border border-slate-800 rounded-2xl p-4 sm:p-5 flex flex-col justify-between">
         <div>
           <div className="flex items-center justify-between gap-2 h-6 text-sm text-slate-400 font-medium whitespace-nowrap mb-3">
             <span className="truncate" title="Açık pozisyonların kâr / zararı">Açık Pozisyon K/Z</span>
@@ -125,7 +125,7 @@ export const ExecutiveSummary: React.FC<ExecutiveSummaryProps> = ({
           </div>
         </div>
 
-        <div className="text-sm text-slate-500 mt-4 pt-3 h-[3.75rem] border-t border-slate-800/80 space-y-1.5">
+        <div className="text-sm text-slate-500 mt-3 sm:mt-4 pt-3 sm:h-[3.75rem] border-t border-slate-800/80 space-y-1.5">
           <div className="flex items-center justify-between">
             <span>Yatırılan Maliyet</span>
             <span className="text-slate-300 font-medium tabular-nums">
@@ -142,7 +142,7 @@ export const ExecutiveSummary: React.FC<ExecutiveSummaryProps> = ({
       </div>
 
       {/* 3. Günlük Değişim */}
-      <div className="bg-[#0f172a] border border-slate-800 rounded-2xl p-5 flex flex-col justify-between">
+      <div className="bg-[#0f172a] border border-slate-800 rounded-2xl p-4 sm:p-5 flex flex-col justify-between">
         <div>
           <div className="flex items-center justify-between gap-2 h-6 text-sm text-slate-400 font-medium whitespace-nowrap mb-3">
             <span className="truncate">Son Kayıttan Bu Yana</span>
@@ -164,14 +164,14 @@ export const ExecutiveSummary: React.FC<ExecutiveSummaryProps> = ({
           )}
         </div>
 
-        <div className="text-sm text-slate-500 mt-4 pt-3 h-[3.75rem] border-t border-slate-800/80 flex items-start justify-between gap-3">
+        <div className="text-sm text-slate-500 mt-3 sm:mt-4 pt-3 sm:h-[3.75rem] border-t border-slate-800/80 flex items-start justify-between gap-3">
           <span>Karşılaştırma</span>
           <span className="text-slate-400">{sinceLabel ?? 'Bugün ilk kayıt'}</span>
         </div>
       </div>
 
       {/* 4. Portföy Durumu & Canlı Senkronizasyon */}
-      <div className="bg-[#0f172a] border border-slate-800 rounded-2xl p-5 flex flex-col justify-between">
+      <div className="bg-[#0f172a] border border-slate-800 rounded-2xl p-4 sm:p-5 flex flex-col justify-between">
         <div>
           <div className="flex items-center justify-between gap-2 h-6 text-sm text-slate-400 font-medium whitespace-nowrap mb-3">
             <span className="truncate">Varlık Sayısı</span>
@@ -186,7 +186,7 @@ export const ExecutiveSummary: React.FC<ExecutiveSummaryProps> = ({
           </div>
         </div>
 
-        <div className="mt-4 pt-3 h-[3.75rem] border-t border-slate-800/80">
+        <div className="mt-3 sm:mt-4 pt-3 sm:h-[3.75rem] border-t border-slate-800/80">
           <button
             onClick={onRefresh}
             disabled={isRefreshing}
