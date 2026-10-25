@@ -209,6 +209,17 @@ export function fetchFundQuote(code: string, kind: 'YAT' | 'EMK'): Promise<Serve
   return fetchServerQuote(`/api/fund?code=${encodeURIComponent(code.trim().toUpperCase())}&kind=${kind}`);
 }
 
+/**
+ * TEFAS/BEFAS funds get one price a day, so a fund already priced live today
+ * (local day) doesn't need another lookup.
+ */
+export function fundPricedToday(asset: PortfolioAsset, now = new Date()): boolean {
+  if (asset.category !== 'TEFAS' && asset.category !== 'BEFAS') return false;
+  if (asset.priceStale || !asset.priceFetchedAt) return false;
+  const fetched = new Date(asset.priceFetchedAt);
+  return fetched.toDateString() === now.toDateString();
+}
+
 /** A fund's foreign-currency share is re-fetched at most this often. */
 export const FX_EXPOSURE_MAX_AGE_MS = 7 * 86_400_000;
 
@@ -352,8 +363,9 @@ export async function batchUpdatePortfolioPrices(
   let failedCount = 0;
 
   const promises = assets.map(async (asset) => {
+    const skipPrice = fundPricedToday(asset);
     const [result, fxPct] = await Promise.all([
-      fetchLivePriceForAsset(asset, rates),
+      skipPrice ? { price: asset.currentPrice, success: true } : fetchLivePriceForAsset(asset, rates),
       needsFxExposure(asset) ? fetchFundFxExposure(asset.symbol, asset.category === 'BEFAS' ? 'EMK' : 'YAT') : null,
     ]);
     // Keep the last known share when it's recent or TEFAS doesn't answer
@@ -367,10 +379,13 @@ export async function batchUpdatePortfolioPrices(
     if (Math.abs(result.price - asset.currentPrice) > 0.0001) {
       updatedCount++;
     }
+    if (skipPrice) return withFx;
+    const fetchedAt = new Date().toISOString();
     return {
       ...withFx,
       currentPrice: Math.round(result.price * 10000) / 10000,
-      lastUpdated: new Date().toISOString(),
+      lastUpdated: fetchedAt,
+      priceFetchedAt: fetchedAt,
       priceStale: false,
     };
   });

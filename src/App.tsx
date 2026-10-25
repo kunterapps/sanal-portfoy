@@ -217,6 +217,7 @@ export default function App() {
           if (updated.symbol !== a.symbol || updated.category !== a.category) {
             delete updated.fxExposurePct;
             delete updated.fxExposureUpdatedAt;
+            delete updated.priceFetchedAt;
           }
           const txs = a.transactions ?? [];
           if (txs.length > 1) {

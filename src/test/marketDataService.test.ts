@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { batchUpdatePortfolioPrices, fetchLivePriceForAsset, needsFxExposure, parseTurkishNumber, quoteInCurrency } from '../services/marketDataService';
+import { batchUpdatePortfolioPrices, fetchLivePriceForAsset, fundPricedToday, needsFxExposure, parseTurkishNumber, quoteInCurrency } from '../services/marketDataService';
 import { makeAsset, RATES } from './fixtures';
 
 describe('parseTurkishNumber', () => {
@@ -46,6 +46,18 @@ describe('batchUpdatePortfolioPrices', () => {
     expect(result.failedCount).toBe(1);
     expect(result.updatedAssets[0]).toMatchObject({ currentPrice: 48, priceStale: true });
     expect(result.updatedAssets[1]).toMatchObject({ currentPrice: 4000, priceStale: false });
+  });
+});
+
+describe('fundPricedToday', () => {
+  const now = new Date(2026, 9, 25, 15, 0);
+  it('skips funds priced live earlier today, unless the price is stale', () => {
+    const fund = makeAsset({ category: 'TEFAS', priceFetchedAt: new Date(2026, 9, 25, 9, 0).toISOString() });
+    expect(fundPricedToday(fund, now)).toBe(true);
+    expect(fundPricedToday({ ...fund, priceStale: true }, now)).toBe(false);
+    expect(fundPricedToday({ ...fund, priceFetchedAt: new Date(2026, 9, 24, 22, 0).toISOString() }, now)).toBe(false);
+    expect(fundPricedToday({ ...fund, priceFetchedAt: undefined }, now)).toBe(false);
+    expect(fundPricedToday({ ...fund, category: 'BIST' }, now)).toBe(false);
   });
 });
 
