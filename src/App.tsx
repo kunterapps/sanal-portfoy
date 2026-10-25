@@ -20,6 +20,7 @@ import { DEMO_PORTFOLIO_ASSETS } from './data/demoPortfolio';
 import { 
   fetchLiveExchangeRates, 
   batchUpdatePortfolioPrices, 
+  fetchFundFxExposure,
   DEFAULT_EXCHANGE_RATES 
 } from './services/marketDataService';
 import { 
@@ -145,6 +146,25 @@ export default function App() {
       }
     };
     initRates();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  // Load each fund's foreign-currency share on startup, so the currency risk
+  // card doesn't wait for a manual price refresh
+  useEffect(() => {
+    let mounted = true;
+    const funds = assets.filter((a) => a.category === 'TEFAS' || a.category === 'BEFAS');
+    Promise.all(
+      funds.map(async (a) => [a.id, await fetchFundFxExposure(a.symbol, a.category === 'BEFAS' ? 'EMK' : 'YAT')] as const)
+    ).then((results) => {
+      const byId = new Map(results.filter(([, pct]) => pct !== null) as [string, number][]);
+      if (!mounted || byId.size === 0) return;
+      setAssets((prev) =>
+        prev.map((a) => (byId.has(a.id) ? { ...a, fxExposurePct: byId.get(a.id) } : a))
+      );
+    });
     return () => {
       mounted = false;
     };
