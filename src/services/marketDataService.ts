@@ -213,7 +213,7 @@ export function fetchFundQuote(code: string, kind: 'YAT' | 'EMK'): Promise<Serve
 export async function fetchFundFxExposure(code: string, kind: 'YAT' | 'EMK'): Promise<number | null> {
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 12000);
+    const timeoutId = setTimeout(() => controller.abort(), 30000);
     const res = await fetch(
       `${PRICE_API_BASE}/api/fund-allocation?code=${encodeURIComponent(code.trim().toUpperCase())}&kind=${kind}`,
       { signal: controller.signal }
