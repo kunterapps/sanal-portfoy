@@ -109,6 +109,9 @@ export function parsePortfolioBackup(parsed: unknown): ImportResult {
       ...(typeof r.notes === 'string' && { notes: r.notes }),
       ...(typeof r.purchaseDate === 'string' && { purchaseDate: r.purchaseDate }),
       ...(r.priceStale === true && { priceStale: true }),
+      ...(typeof r.fxExposurePct === 'number' &&
+        r.fxExposurePct >= 0 &&
+        r.fxExposurePct <= 100 && { fxExposurePct: r.fxExposurePct }),
     };
 
     if (r.transactions !== undefined && (!Array.isArray(r.transactions) || r.transactions.length > 0)) {

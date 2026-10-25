@@ -187,6 +187,31 @@ export function calculateCategorySummaries(
 }
 
 /**
+ * Currency an asset is actually exposed to. CASH is detected from its
+ * symbol/name; gold and silver track USD ounce prices even when priced in
+ * TRY; everything else follows its price currency.
+ */
+export function getExposureCurrency(asset: PortfolioAsset): Currency {
+  if (asset.category === 'CASH') return detectCashCurrency(asset) || asset.currentCurrency;
+  if (asset.category === 'COMMODITY' && asset.goldType) return 'USD';
+  return asset.currentCurrency;
+}
+
+/**
+ * How an asset's value splits across currencies, as fractions summing to 1.
+ * TRY funds with a known foreign-currency share count that share as USD.
+ */
+export function getExposureSplit(asset: PortfolioAsset): Partial<Record<Currency, number>> {
+  const main = getExposureCurrency(asset);
+  const fx = (asset.category === 'TEFAS' || asset.category === 'BEFAS') && main === 'TRY'
+    ? Math.min(100, Math.max(0, asset.fxExposurePct ?? 0)) / 100
+    : 0;
+  if (fx === 0) return { [main]: 1 };
+  if (fx === 1) return { USD: 1 };
+  return { TRY: 1 - fx, USD: fx };
+}
+
+/**
  * Computes currency risk breakdown
  */
 export function calculateCurrencySummaries(
@@ -199,12 +224,8 @@ export function calculateCurrencySummaries(
   const summaries = currencies.map((curr) => {
     let valueTRY = 0;
     assets.forEach((asset) => {
-      const expCurr: Currency =
-        (asset.category === 'CASH' && detectCashCurrency(asset)) || asset.currentCurrency;
-      if (expCurr === curr) {
-        const pl = getAssetProfitLoss(asset, rates);
-        valueTRY += pl.valueTRY;
-      }
+      const share = getExposureSplit(asset)[curr];
+      if (share) valueTRY += getAssetProfitLoss(asset, rates).valueTRY * share;
     });
 
     const percentage = totals.totalValueTRY > 0 ? (valueTRY / totals.totalValueTRY) * 100 : 0;

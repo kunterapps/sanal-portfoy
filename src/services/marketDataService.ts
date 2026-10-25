@@ -209,6 +209,25 @@ export function fetchFundQuote(code: string, kind: 'YAT' | 'EMK'): Promise<Serve
   return fetchServerQuote(`/api/fund?code=${encodeURIComponent(code.trim().toUpperCase())}&kind=${kind}`);
 }
 
+/** Foreign-currency share (0–100) of a fund's portfolio, or null if unknown. */
+export async function fetchFundFxExposure(code: string, kind: 'YAT' | 'EMK'): Promise<number | null> {
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 12000);
+    const res = await fetch(
+      `${PRICE_API_BASE}/api/fund-allocation?code=${encodeURIComponent(code.trim().toUpperCase())}&kind=${kind}`,
+      { signal: controller.signal }
+    );
+    clearTimeout(timeoutId);
+    if (!res.ok) return null;
+    const data = await res.json();
+    const pct = data?.fxPct;
+    return typeof pct === 'number' && pct >= 0 && pct <= 100 ? pct : null;
+  } catch {
+    return null;
+  }
+}
+
 const KNOWN_CURRENCIES: Currency[] = ['TRY', 'USD', 'EUR', 'GBP'];
 
 /** Converts a quote into the asset's price currency when both are known. */
@@ -322,17 +341,23 @@ export async function batchUpdatePortfolioPrices(
   let failedCount = 0;
 
   const promises = assets.map(async (asset) => {
-    const result = await fetchLivePriceForAsset(asset, rates);
+    const isFund = asset.category === 'TEFAS' || asset.category === 'BEFAS';
+    const [result, fxPct] = await Promise.all([
+      fetchLivePriceForAsset(asset, rates),
+      isFund ? fetchFundFxExposure(asset.symbol, asset.category === 'BEFAS' ? 'EMK' : 'YAT') : null,
+    ]);
+    // Keep the last known share when TEFAS doesn't answer
+    const withFx = fxPct !== null ? { ...asset, fxExposurePct: fxPct } : asset;
     if (!result.success) {
       failedCount++;
       // Keep the last known price but flag it so the UI can show it's outdated
-      return { ...asset, priceStale: true };
+      return { ...withFx, priceStale: true };
     }
     if (Math.abs(result.price - asset.currentPrice) > 0.0001) {
       updatedCount++;
     }
     return {
-      ...asset,
+      ...withFx,
       currentPrice: Math.round(result.price * 10000) / 10000,
       lastUpdated: new Date().toISOString(),
       priceStale: false,

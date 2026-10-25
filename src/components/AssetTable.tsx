@@ -294,6 +294,9 @@ export const AssetTable: React.FC<AssetTableProps> = ({
                     Son güncellemede canlı fiyat alınamadı, gösterilen fiyat eski.
                   </div>
                 )}
+                {asset.fxExposurePct !== undefined && (
+                  <div className="text-xs text-slate-500">Fon portföyünün %{asset.fxExposurePct.toFixed(1)}'i döviz</div>
+                )}
                 {!!asset.realizedProfit && (
                   <div className={`text-xs ${asset.realizedProfit > 0 ? 'text-emerald-500/80' : 'text-rose-500/80'}`}>
                     Gerçekleşmiş K/Z: {asset.realizedProfit > 0 ? '+' : '-'}
@@ -489,6 +492,11 @@ export const AssetTable: React.FC<AssetTableProps> = ({
                         >
                           <AlertTriangle className="w-3 h-3" />
                           Eski fiyat
+                        </div>
+                      )}
+                      {asset.fxExposurePct !== undefined && (
+                        <div className="text-xs text-slate-500" title="TEFAS portföy dağılımına göre döviz, altın ve yabancı menkul kıymet payı">
+                          Döviz %{asset.fxExposurePct.toFixed(1)}
                         </div>
                       )}
                       <button

@@ -4,6 +4,7 @@ import {
   createPriceMiddleware,
   createPriceService,
   handlePriceRequest,
+  parseTefasAllocation,
   parseTefasFunds,
   parseYahooChart,
 } from '../../server/priceApi';
@@ -160,6 +161,32 @@ describe('createPriceMiddleware', () => {
     expect((await call('/api/quote?symbol=%3Cscript%3E')).statusCode).toBe(400);
     expect((await call('/api/quote?symbol=X', 'POST')).statusCode).toBe(405);
     expect((await call('/api/other')).statusCode).toBe(404);
+  });
+});
+
+describe('fund allocation', () => {
+  it('sums foreign-currency, gold and foreign-security shares of the latest row', () => {
+    const data = {
+      resultList: [
+        { fonKodu: 'AFT', tarih: '2026-10-22', yhs: 50 },
+        { fonKodu: 'AFT', tarih: '2026-10-23', hs: 10, r: 5, yhs: '70,5', ybyf: 4, eut: 3, vmd: 2, km: 5.5, d: null },
+        { fonKodu: 'XYZ', tarih: '2026-10-24', yhs: 100 },
+      ],
+    };
+    expect(parseTefasAllocation(data, 'AFT')).toEqual({ fxPct: 85, source: 'tefas', asOf: '2026-10-23T00:00:00.000Z' });
+    expect(parseTefasAllocation({ resultList: [] }, 'AFT')).toBeNull();
+  });
+
+  it('posts to the TEFAS allocation endpoint and serves the result', async () => {
+    const fetchFn = vi.fn(async () => jsonResponse({ resultList: [{ fonKodu: 'AFT', tarih: '2026-10-23', yhs: 90 }] }));
+    const service = createPriceService(fetchFn as unknown as typeof fetch, () => new Date(2026, 9, 24).getTime());
+    const result = await handlePriceRequest(new URL('http://x/api/fund-allocation?code=aft&kind=YAT'), 'GET', service);
+    expect(result).toMatchObject({ status: 200, body: { fxPct: 90 } });
+    const [url, init] = fetchFn.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe('https://www.tefas.gov.tr/api/funds/dagilimSiraliGetirT');
+    expect(JSON.parse(String(init.body))).toMatchObject({ fonTipi: 'YAT', fonKodu: 'AFT', basTarih: '20261010' });
+    await service.getFundAllocation('AFT', 'YAT');
+    expect(fetchFn).toHaveBeenCalledTimes(1);
   });
 });
 

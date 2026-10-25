@@ -6,6 +6,7 @@ import {
   convertToTRY,
   convertToUSD,
   getAssetProfitLoss,
+  getExposureCurrency,
 } from '../utils/portfolioCalculations';
 import { makeAsset, RATES } from './fixtures';
 
@@ -63,5 +64,25 @@ describe('portfolio summaries', () => {
   it('counts USD cash held in TRY as USD exposure', () => {
     const byCurrency = Object.fromEntries(calculateCurrencySummaries(assets, RATES).map((c) => [c.currency, c.valueTRY]));
     expect(byCurrency).toEqual({ TRY: 1500, USD: 9000 });
+  });
+
+  it('counts every gold type and silver as USD exposure', () => {
+    const metals = [
+      makeAsset({ id: 'g1', category: 'COMMODITY', goldType: 'CEYREK', quantity: 1, currentPrice: 2000 }),
+      makeAsset({ id: 'g2', category: 'COMMODITY', goldType: 'GRAM_24', quantity: 1, currentPrice: 3000 }),
+      makeAsset({ id: 's1', category: 'COMMODITY', goldType: 'GUMUS_GRAM', quantity: 1, currentPrice: 500 }),
+    ];
+    expect(getExposureCurrency(metals[0])).toBe('USD');
+    const byCurrency = Object.fromEntries(calculateCurrencySummaries(metals, RATES).map((c) => [c.currency, c.valueTRY]));
+    expect(byCurrency).toEqual({ USD: 5500 });
+  });
+
+  it('splits funds by their foreign-currency share', () => {
+    const funds = [
+      makeAsset({ id: 'f1', category: 'TEFAS', symbol: 'AFT', quantity: 1, currentPrice: 1000, fxExposurePct: 80 }),
+      makeAsset({ id: 'f2', category: 'BEFAS', symbol: 'AH1', quantity: 1, currentPrice: 500 }),
+    ];
+    const byCurrency = Object.fromEntries(calculateCurrencySummaries(funds, RATES).map((c) => [c.currency, c.valueTRY]));
+    expect(byCurrency).toEqual({ TRY: 700, USD: 800 });
   });
 });

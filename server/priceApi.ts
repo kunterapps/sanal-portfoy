@@ -102,6 +102,51 @@ export function parseTefasFunds(data: unknown, fund?: string): Quote | null {
   return { price: best.price, currency: 'TRY', source: 'tefas', asOf: new Date(best.time).toISOString() };
 }
 
+/**
+ * dagilimSiraliGetirT fields (percent of the fund's portfolio) that are
+ * exposed to foreign currency: FX/eurobond debt, FX and gold deposits and
+ * participation accounts, FX lease certificates, precious metals and foreign
+ * securities. Gold counts as USD exposure, like gold held directly.
+ */
+const FX_ALLOCATION_FIELDS = [
+  'eut', 'kibd', 'osdb', 'kba', 'dot', 'db',
+  'vmd', 'vmau', 'khd', 'khau',
+  'kksd', 'kksyd', 'oksyd',
+  'km', 'kmbyf', 'kmkba', 'kmkks',
+  'ymk', 'yba', 'ybkb', 'ybosb', 'yhs', 'ybyf',
+];
+
+export interface FundAllocation {
+  /** Share of the fund's portfolio exposed to foreign currency or gold, 0–100 */
+  fxPct: number;
+  source: 'tefas';
+  asOf: string;
+}
+
+/** Extracts the latest foreign-currency share from a dagilimSiraliGetirT response. */
+export function parseTefasAllocation(data: unknown, fund?: string): FundAllocation | null {
+  const rows = (data as { resultList?: unknown[] })?.resultList;
+  if (!Array.isArray(rows)) return null;
+  let best: { time: number; row: Record<string, unknown> } | null = null;
+  for (const row of rows) {
+    const r = row as Record<string, unknown>;
+    if (fund && typeof r.fonKodu === 'string' && r.fonKodu.toUpperCase() !== fund) continue;
+    const time = parseTefasDate(r.tarih);
+    if (!Number.isFinite(time)) continue;
+    if (!best || time > best.time) best = { time, row: r };
+  }
+  if (!best) return null;
+  const fxPct = FX_ALLOCATION_FIELDS.reduce((sum, key) => {
+    const v = parseTefasPrice(best.row[key]);
+    return Number.isFinite(v) && v > 0 ? sum + v : sum;
+  }, 0);
+  return {
+    fxPct: Math.round(Math.min(100, fxPct) * 10) / 10,
+    source: 'tefas',
+    asOf: new Date(best.time).toISOString(),
+  };
+}
+
 export interface FundAttempt {
   source: string;
   status: number;
@@ -129,6 +174,29 @@ function errorNote(err: unknown): string {
 
 function compactDate(d: Date): string {
   return `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
+}
+
+/** Request body for TEFAS's sorted fund lists; two weeks covers weekends and holidays. */
+function fundListBody(fund: string, kind: 'YAT' | 'EMK', nowMs: number) {
+  return {
+    fonTipi: kind,
+    fonKodu: fund,
+    aramaMetni: null,
+    fonTurKod: null,
+    fonGrubu: null,
+    sfonTurKod: null,
+    fonTurAciklama: null,
+    kurucuKod: null,
+    basTarih: compactDate(new Date(nowMs - 14 * 86_400_000)),
+    bitTarih: compactDate(new Date(nowMs)),
+    basSira: 1,
+    bitSira: 100,
+    dil: 'TR',
+    sFonTurKod: '',
+    fonKod: '',
+    fonGrup: '',
+    fonUnvanTip: '',
+  };
 }
 
 export function createPriceService(fetchFn: FetchFn = fetch, now: () => number = Date.now) {
@@ -196,26 +264,8 @@ export function createPriceService(fetchFn: FetchFn = fetch, now: () => number =
     let quote = await post('tefas-fiyat', '/api/funds/fonFiyatBilgiGetir', { fonKodu: fund, dil: 'TR', periyod: 1 });
     if (quote) return { quote, attempts };
 
-    // 2. General fund info; two weeks covers weekends and holidays
-    quote = await post('tefas-bilgi', '/api/funds/fonGnlBlgSiraliGetir', {
-      fonTipi: kind,
-      fonKodu: fund,
-      aramaMetni: null,
-      fonTurKod: null,
-      fonGrubu: null,
-      sfonTurKod: null,
-      fonTurAciklama: null,
-      kurucuKod: null,
-      basTarih: compactDate(new Date(now() - 14 * 86_400_000)),
-      bitTarih: compactDate(new Date(now())),
-      basSira: 1,
-      bitSira: 100,
-      dil: 'TR',
-      sFonTurKod: '',
-      fonKod: '',
-      fonGrup: '',
-      fonUnvanTip: '',
-    });
+    // 2. General fund info
+    quote = await post('tefas-bilgi', '/api/funds/fonGnlBlgSiraliGetir', fundListBody(fund, kind, now()));
     return { quote, attempts };
   }
 
@@ -235,7 +285,31 @@ export function createPriceService(fetchFn: FetchFn = fetch, now: () => number =
     return fundDetails.get(`tefas:${kind}:${code.trim().toUpperCase()}`);
   }
 
-  return { getStockQuote, getFundQuote, getFundAttempts };
+  const allocationCache = new Map<string, { expires: number; value: FundAllocation | null }>();
+
+  /** Foreign-currency share of a fund's portfolio; TEFAS updates it daily. */
+  async function getFundAllocation(code: string, kind: 'YAT' | 'EMK'): Promise<FundAllocation | null> {
+    const fund = code.trim().toUpperCase();
+    if (!FUND_RE.test(fund)) return null;
+    const key = `${kind}:${fund}`;
+    const hit = allocationCache.get(key);
+    if (hit && hit.expires > now()) return hit.value;
+    let value: FundAllocation | null = null;
+    try {
+      const res = await fetchWithTimeout(fetchFn, `${TEFAS}/api/funds/dagilimSiraliGetirT`, {
+        method: 'POST',
+        headers: TEFAS_HEADERS,
+        body: JSON.stringify(fundListBody(fund, kind, now())),
+      });
+      if (res.ok) value = parseTefasAllocation(await res.json(), fund);
+    } catch {
+      // Not JSON or unreachable; treated as unknown
+    }
+    allocationCache.set(key, { value, expires: now() + (value ? 6 * 3_600_000 : 60_000) });
+    return value;
+  }
+
+  return { getStockQuote, getFundQuote, getFundAttempts, getFundAllocation };
 }
 
 export interface ApiResult {
@@ -244,12 +318,13 @@ export interface ApiResult {
 }
 
 type PriceService = Pick<ReturnType<typeof createPriceService>, 'getStockQuote' | 'getFundQuote'> &
-  Partial<Pick<ReturnType<typeof createPriceService>, 'getFundAttempts'>>;
+  Partial<Pick<ReturnType<typeof createPriceService>, 'getFundAttempts' | 'getFundAllocation'>>;
 
 /**
  * Shared request logic for the Node middleware and the Cloudflare Worker:
  *   GET /api/quote?symbol=THYAO.IS
  *   GET /api/fund?code=TCD&kind=YAT|EMK
+ *   GET /api/fund-allocation?code=TCD&kind=YAT|EMK
  * Returns null for paths outside /api/.
  */
 export async function handlePriceRequest(url: URL, method: string, service: PriceService): Promise<ApiResult | null> {
@@ -273,6 +348,16 @@ export async function handlePriceRequest(url: URL, method: string, service: Pric
       // Include what each source answered so a failing setup can be diagnosed from the browser
       const details = service.getFundAttempts?.(code, kind);
       return { status: 404, body: { error: 'Fiyat bulunamadı', ...(details ? { details } : {}) } };
+    }
+
+    if (url.pathname === '/api/fund-allocation' && service.getFundAllocation) {
+      const code = url.searchParams.get('code') || '';
+      const kind = url.searchParams.get('kind') === 'EMK' ? 'EMK' : 'YAT';
+      if (!FUND_RE.test(code.trim().toUpperCase())) return { status: 400, body: { error: 'Geçersiz fon kodu' } };
+      const allocation = await service.getFundAllocation(code, kind);
+      return allocation
+        ? { status: 200, body: allocation }
+        : { status: 404, body: { error: 'Portföy dağılımı bulunamadı' } };
     }
 
     return { status: 404, body: { error: 'Bilinmeyen uç nokta' } };
