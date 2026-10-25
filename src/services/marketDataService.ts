@@ -177,6 +177,7 @@ export interface ServerQuote {
   currency: string;
   source: string;
   asOf: string;
+  name?: string;
 }
 
 // Price API location: same origin in local dev/preview, the Cloudflare Worker
@@ -215,7 +216,7 @@ export function fetchFundQuote(code: string, kind: 'YAT' | 'EMK'): Promise<Serve
  */
 export function fundPricedToday(asset: PortfolioAsset, now = new Date()): boolean {
   if (asset.category !== 'TEFAS' && asset.category !== 'BEFAS') return false;
-  if (asset.priceStale || !asset.priceFetchedAt) return false;
+  if (asset.priceStale || !asset.priceFetchedAt || hasPlaceholderName(asset)) return false;
   const fetched = new Date(asset.priceFetchedAt);
   return fetched.toDateString() === now.toDateString();
 }
@@ -231,8 +232,33 @@ export function needsFxExposure(asset: PortfolioAsset, nowMs = Date.now()): bool
   return !(fetched > nowMs - FX_EXPOSURE_MAX_AGE_MS);
 }
 
-/** Foreign-currency share (0–100) of a fund's portfolio, or null if unknown. */
-export async function fetchFundFxExposure(code: string, kind: 'YAT' | 'EMK'): Promise<number | null> {
+/** True when a stock or fund still shows its code instead of a real name. */
+export function hasPlaceholderName(asset: PortfolioAsset): boolean {
+  if (!['BIST', 'FOREIGN_STOCK', 'TEFAS', 'BEFAS'].includes(asset.category)) return false;
+  const base = (v: string) => v.trim().toUpperCase().split('.')[0];
+  return !asset.name?.trim() || base(asset.name) === base(asset.symbol);
+}
+
+const TR_SMALL_WORDS = new Set(['ve', 'ile', 'veya']);
+
+/** "İŞ PORTFÖY YABANCI HİSSE FONU" → "İş Portföy Yabancı Hisse Fonu"; mixed-case names are kept. */
+export function tidyAssetName(name: string): string {
+  const n = name.trim().replace(/\s+/g, ' ');
+  if (n !== n.toLocaleUpperCase('tr-TR')) return n;
+  return n
+    .toLocaleLowerCase('tr-TR')
+    .split(' ')
+    .map((w, i) =>
+      i > 0 && TR_SMALL_WORDS.has(w) ? w : w.charAt(0).toLocaleUpperCase('tr-TR') + w.slice(1)
+    )
+    .join(' ');
+}
+
+/** Foreign-currency share (0–100) of a fund's portfolio and the fund's name, or null if unknown. */
+export async function fetchFundFxExposure(
+  code: string,
+  kind: 'YAT' | 'EMK'
+): Promise<{ fxPct: number; name?: string } | null> {
   try {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 30000);
@@ -244,7 +270,8 @@ export async function fetchFundFxExposure(code: string, kind: 'YAT' | 'EMK'): Pr
     if (!res.ok) return null;
     const data = await res.json();
     const pct = data?.fxPct;
-    return typeof pct === 'number' && pct >= 0 && pct <= 100 ? pct : null;
+    if (!(typeof pct === 'number' && pct >= 0 && pct <= 100)) return null;
+    return { fxPct: pct, ...(typeof data.name === 'string' && data.name.trim() && { name: data.name }) };
   } catch {
     return null;
   }
@@ -264,7 +291,7 @@ export function quoteInCurrency(quote: ServerQuote, target: Currency, rates: Exc
 export async function fetchLivePriceForAsset(
   asset: PortfolioAsset,
   rates: ExchangeRates
-): Promise<{ price: number; success: boolean }> {
+): Promise<{ price: number; success: boolean; name?: string }> {
   try {
     // 1. Precious Metals & Turkish Gold
     if (asset.category === 'COMMODITY' && asset.goldType) {
@@ -292,13 +319,13 @@ export async function fetchLivePriceForAsset(
         ? asset.symbol.toUpperCase() 
         : `${asset.symbol.toUpperCase()}.IS`;
       const quote = await fetchStockQuote(symbolWithSuffix);
-      if (quote) return { price: quoteInCurrency(quote, asset.currentCurrency, rates), success: true };
+      if (quote) return { price: quoteInCurrency(quote, asset.currentCurrency, rates), success: true, name: quote.name };
     }
 
     // 4. Foreign Stocks & ETFs (NVDA, VWCE.DE, CSPX.L etc.)
     if (asset.category === 'FOREIGN_STOCK') {
       const quote = await fetchStockQuote(asset.symbol);
-      if (quote) return { price: quoteInCurrency(quote, asset.currentCurrency, rates), success: true };
+      if (quote) return { price: quoteInCurrency(quote, asset.currentCurrency, rates), success: true, name: quote.name };
     }
 
     // 5. TEFAS & BEFAS Funds (Automatic Live Price Fetching)
@@ -307,7 +334,7 @@ export async function fetchLivePriceForAsset(
       const kind = asset.category === 'BEFAS' ? 'EMK' : 'YAT';
 
       const quote = await fetchFundQuote(fundCode, kind);
-      if (quote) return { price: quoteInCurrency(quote, asset.currentCurrency, rates), success: true };
+      if (quote) return { price: quoteInCurrency(quote, asset.currentCurrency, rates), success: true, name: quote.name };
     }
 
     // 6. Cryptocurrencies (BTC, ETH, SOL, AVAX, etc.)
@@ -364,25 +391,30 @@ export async function batchUpdatePortfolioPrices(
 
   const promises = assets.map(async (asset) => {
     const skipPrice = fundPricedToday(asset);
-    const [result, fxPct] = await Promise.all([
+    const [result, fx] = await Promise.all([
       skipPrice ? { price: asset.currentPrice, success: true } : fetchLivePriceForAsset(asset, rates),
-      needsFxExposure(asset) ? fetchFundFxExposure(asset.symbol, asset.category === 'BEFAS' ? 'EMK' : 'YAT') : null,
+      needsFxExposure(asset) || hasPlaceholderName(asset)
+        ? fetchFundFxExposure(asset.symbol, asset.category === 'BEFAS' ? 'EMK' : 'YAT')
+        : null,
     ]);
     // Keep the last known share when it's recent or TEFAS doesn't answer
-    const withFx =
-      fxPct !== null ? { ...asset, fxExposurePct: fxPct, fxExposureUpdatedAt: new Date().toISOString() } : asset;
+    let next: PortfolioAsset =
+      fx !== null ? { ...asset, fxExposurePct: fx.fxPct, fxExposureUpdatedAt: new Date().toISOString() } : asset;
+    // Fill in the real company/fund name when only the code was entered
+    const sourceName = ('name' in result && result.name) || fx?.name;
+    if (sourceName && hasPlaceholderName(asset)) next = { ...next, name: tidyAssetName(sourceName) };
     if (!result.success) {
       failedCount++;
       // Keep the last known price but flag it so the UI can show it's outdated
-      return { ...withFx, priceStale: true };
+      return { ...next, priceStale: true };
     }
     if (Math.abs(result.price - asset.currentPrice) > 0.0001) {
       updatedCount++;
     }
-    if (skipPrice) return withFx;
+    if (skipPrice) return next;
     const fetchedAt = new Date().toISOString();
     return {
-      ...withFx,
+      ...next,
       currentPrice: Math.round(result.price * 10000) / 10000,
       lastUpdated: fetchedAt,
       priceFetchedAt: fetchedAt,

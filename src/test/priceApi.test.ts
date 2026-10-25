@@ -164,6 +164,16 @@ describe('createPriceMiddleware', () => {
   });
 });
 
+describe('source names', () => {
+  it('reads company and fund names when present', () => {
+    const chart = { chart: { result: [{ meta: { regularMarketPrice: 431.5, currency: 'TRY', longName: 'Migros Ticaret A.S.' } }] } };
+    expect(parseYahooChart(chart)?.name).toBe('Migros Ticaret A.S.');
+    const funds = { resultList: [{ fonKodu: 'IJC', tarih: '2026-10-23', fiyat: 13.85, fonUnvan: 'İŞ PORTFÖY FONU' }] };
+    expect(parseTefasFunds(funds, 'IJC')?.name).toBe('İŞ PORTFÖY FONU');
+    expect(parseTefasAllocation({ resultList: [{ fonKodu: 'IJC', tarih: '2026-10-23', yhs: 5, fonUnvan: 'İŞ PORTFÖY FONU' }] }, 'IJC')?.name).toBe('İŞ PORTFÖY FONU');
+  });
+});
+
 describe('fund allocation', () => {
   it('sums foreign-currency, gold and foreign-security shares of the latest row', () => {
     const data = {
