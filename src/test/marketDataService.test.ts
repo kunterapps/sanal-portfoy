@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { batchUpdatePortfolioPrices, fetchLivePriceForAsset, parseTurkishNumber, quoteInCurrency } from '../services/marketDataService';
+import { batchUpdatePortfolioPrices, fetchLivePriceForAsset, fundPricedToday, needsFxExposure, parseTurkishNumber, quoteInCurrency } from '../services/marketDataService';
 import { makeAsset, RATES } from './fixtures';
 
 describe('parseTurkishNumber', () => {
@@ -49,6 +49,18 @@ describe('batchUpdatePortfolioPrices', () => {
   });
 });
 
+describe('fundPricedToday', () => {
+  const now = new Date(2026, 9, 25, 15, 0);
+  it('skips funds priced live earlier today, unless the price is stale', () => {
+    const fund = makeAsset({ category: 'TEFAS', priceFetchedAt: new Date(2026, 9, 25, 9, 0).toISOString() });
+    expect(fundPricedToday(fund, now)).toBe(true);
+    expect(fundPricedToday({ ...fund, priceStale: true }, now)).toBe(false);
+    expect(fundPricedToday({ ...fund, priceFetchedAt: new Date(2026, 9, 24, 22, 0).toISOString() }, now)).toBe(false);
+    expect(fundPricedToday({ ...fund, priceFetchedAt: undefined }, now)).toBe(false);
+    expect(fundPricedToday({ ...fund, category: 'BIST' }, now)).toBe(false);
+  });
+});
+
 describe('quoteInCurrency', () => {
   it('converts a quote into the asset currency', () => {
     const q = { price: 10, currency: 'EUR', source: 'yahoo', asOf: '' };
@@ -90,5 +102,20 @@ describe('fetchLivePriceForAsset (crypto)', () => {
     const asset = makeAsset({ category: 'CRYPTO', symbol: 'BTCUSDT', currentCurrency: 'USD' });
     expect(await fetchLivePriceForAsset(asset, RATES)).toEqual({ price: 100_000, success: true });
     expect(String(fetchMock.mock.calls[0][0])).toContain('symbol=BTCUSDT');
+  });
+});
+
+describe('needsFxExposure', () => {
+  const now = Date.parse('2026-10-25T12:00:00Z');
+  it('asks for funds with no share or a week-old one, never for other assets', () => {
+    expect(needsFxExposure(makeAsset({ category: 'TEFAS' }), now)).toBe(true);
+    expect(
+      needsFxExposure(makeAsset({ category: 'BEFAS', fxExposurePct: 40, fxExposureUpdatedAt: '2026-10-20T12:00:00Z' }), now)
+    ).toBe(false);
+    expect(
+      needsFxExposure(makeAsset({ category: 'TEFAS', fxExposurePct: 40, fxExposureUpdatedAt: '2026-10-17T12:00:00Z' }), now)
+    ).toBe(true);
+    expect(needsFxExposure(makeAsset({ category: 'TEFAS', fxExposurePct: 40 }), now)).toBe(true);
+    expect(needsFxExposure(makeAsset({ category: 'BIST' }), now)).toBe(false);
   });
 });

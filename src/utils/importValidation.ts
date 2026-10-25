@@ -112,6 +112,8 @@ export function parsePortfolioBackup(parsed: unknown): ImportResult {
       ...(typeof r.fxExposurePct === 'number' &&
         r.fxExposurePct >= 0 &&
         r.fxExposurePct <= 100 && { fxExposurePct: r.fxExposurePct }),
+      ...(typeof r.priceFetchedAt === 'string' && { priceFetchedAt: r.priceFetchedAt }),
+      ...(typeof r.fxExposureUpdatedAt === 'string' && { fxExposureUpdatedAt: r.fxExposureUpdatedAt }),
     };
 
     if (r.transactions !== undefined && (!Array.isArray(r.transactions) || r.transactions.length > 0)) {

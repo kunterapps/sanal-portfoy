@@ -295,47 +295,55 @@ export function createPriceService(fetchFn: FetchFn = fetch, now: () => number =
     return fundDetails.get(`tefas:${kind}:${code.trim().toUpperCase()}`);
   }
 
-  const allocationCache = new Map<string, { expires: number; value: FundAllocation | null }>();
-  const ALLOCATION_TTL = 6 * 3_600_000;
+  // TEFAS breakdowns are monthly reports; one fetch a day is plenty
+  const ALLOCATION_TTL = 24 * 3_600_000;
+  const allocationLists = new Map<string, { expires: number; funds: Map<string, FundAllocation> }>();
+  const allocationLoads = new Map<string, Promise<Map<string, FundAllocation>>>();
 
   /**
-   * Foreign-currency share of a fund's portfolio; TEFAS updates it daily.
-   * TEFAS may ignore the fund filter and return every fund of the type, so
-   * ask one day at a time (walking back over weekends and holidays) with no
-   * row cap, and cache every fund in the answer.
+   * Every fund's foreign-currency share for one fund type. TEFAS's
+   * dagilimSiraliGetirT ignores the fund filter and returns the whole list,
+   * so fetch it once (latest day with data, walking back over weekends and
+   * holidays) and share it between concurrent requests.
    */
+  async function loadAllocations(kind: 'YAT' | 'EMK'): Promise<Map<string, FundAllocation>> {
+    const cached = allocationLists.get(kind);
+    if (cached && cached.expires > now()) return cached.funds;
+    const pending = allocationLoads.get(kind);
+    if (pending) return pending;
+
+    const load = (async () => {
+      let funds = new Map<string, FundAllocation>();
+      for (let back = 0; back < 7 && funds.size === 0; back++) {
+        try {
+          const res = await fetchWithTimeout(fetchFn, `${TEFAS}/api/funds/dagilimSiraliGetirT`, {
+            method: 'POST',
+            headers: TEFAS_HEADERS,
+            body: JSON.stringify({ ...fundListBody('', kind, now() - back * 86_400_000, 0, 100_000), fonKodu: null }),
+          }, 20_000);
+          if (!res.ok) break;
+          funds = parseTefasAllocations(await res.json());
+        } catch {
+          // Not JSON or unreachable; treated as unknown
+          break;
+        }
+      }
+      allocationLists.set(kind, { funds, expires: now() + (funds.size ? ALLOCATION_TTL : 60_000) });
+      return funds;
+    })();
+    allocationLoads.set(kind, load);
+    try {
+      return await load;
+    } finally {
+      allocationLoads.delete(kind);
+    }
+  }
+
+  /** Foreign-currency share of a fund's portfolio; TEFAS updates it daily. */
   async function getFundAllocation(code: string, kind: 'YAT' | 'EMK'): Promise<FundAllocation | null> {
     const fund = code.trim().toUpperCase();
     if (!FUND_RE.test(fund)) return null;
-    const key = `${kind}:${fund}`;
-    const hit = allocationCache.get(key);
-    if (hit && hit.expires > now()) return hit.value;
-
-    let value: FundAllocation | null = null;
-    for (let back = 0; back < 7 && !value; back++) {
-      const day = now() - back * 86_400_000;
-      let found: Map<string, FundAllocation>;
-      try {
-        const res = await fetchWithTimeout(fetchFn, `${TEFAS}/api/funds/dagilimSiraliGetirT`, {
-          method: 'POST',
-          headers: TEFAS_HEADERS,
-          body: JSON.stringify(fundListBody(fund, kind, day, 0, 100_000)),
-        }, 15_000);
-        if (!res.ok) break;
-        found = parseTefasAllocations(await res.json());
-      } catch {
-        // Not JSON or unreachable; treated as unknown
-        break;
-      }
-      for (const [c, alloc] of found) {
-        allocationCache.set(`${kind}:${c}`, { value: alloc, expires: now() + ALLOCATION_TTL });
-      }
-      value = found.get(fund) ?? null;
-      // A full list for that day without this fund means it isn't of this type
-      if (!value && found.size > 1) break;
-    }
-    allocationCache.set(key, { value, expires: now() + (value ? ALLOCATION_TTL : 60_000) });
-    return value;
+    return (await loadAllocations(kind)).get(fund) ?? null;
   }
 
   return { getStockQuote, getFundQuote, getFundAttempts, getFundAllocation };

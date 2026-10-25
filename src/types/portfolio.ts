@@ -54,6 +54,10 @@ export interface PortfolioAsset {
   realizedProfit?: number;
   /** TEFAS/BEFAS funds: share of the fund's portfolio in FX, gold or foreign securities (0–100) */
   fxExposurePct?: number;
+  /** When a live price was last fetched (ISO); funds are priced once a day */
+  priceFetchedAt?: string;
+  /** When fxExposurePct was last fetched (ISO) */
+  fxExposureUpdatedAt?: string;
 }
 
 export interface ExchangeRates {

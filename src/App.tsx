@@ -21,6 +21,7 @@ import {
   fetchLiveExchangeRates, 
   batchUpdatePortfolioPrices, 
   fetchFundFxExposure,
+  needsFxExposure,
   DEFAULT_EXCHANGE_RATES 
 } from './services/marketDataService';
 import { 
@@ -151,18 +152,22 @@ export default function App() {
     };
   }, []);
 
-  // Load each fund's foreign-currency share on startup, so the currency risk
-  // card doesn't wait for a manual price refresh
+  // Load missing or week-old fund foreign-currency shares on startup, so the
+  // currency risk card doesn't wait for a manual price refresh
   useEffect(() => {
     let mounted = true;
-    const funds = assets.filter((a) => a.category === 'TEFAS' || a.category === 'BEFAS');
+    const funds = assets.filter((a) => needsFxExposure(a));
+    if (funds.length === 0) return;
     Promise.all(
       funds.map(async (a) => [a.id, await fetchFundFxExposure(a.symbol, a.category === 'BEFAS' ? 'EMK' : 'YAT')] as const)
     ).then((results) => {
       const byId = new Map(results.filter(([, pct]) => pct !== null) as [string, number][]);
       if (!mounted || byId.size === 0) return;
+      const fetchedAt = new Date().toISOString();
       setAssets((prev) =>
-        prev.map((a) => (byId.has(a.id) ? { ...a, fxExposurePct: byId.get(a.id) } : a))
+        prev.map((a) =>
+          byId.has(a.id) ? { ...a, fxExposurePct: byId.get(a.id), fxExposureUpdatedAt: fetchedAt } : a
+        )
       );
     });
     return () => {
@@ -208,6 +213,12 @@ export default function App() {
         prev.map((a) => {
           if (a.id !== existingId) return a;
           const updated: PortfolioAsset = { ...a, ...assetData, id: existingId, priceStale: false };
+          // A different fund code means the stored foreign-currency share no longer applies
+          if (updated.symbol !== a.symbol || updated.category !== a.category) {
+            delete updated.fxExposurePct;
+            delete updated.fxExposureUpdatedAt;
+            delete updated.priceFetchedAt;
+          }
           const txs = a.transactions ?? [];
           if (txs.length > 1) {
             // Quantity and cost are managed by transactions; keep them authoritative

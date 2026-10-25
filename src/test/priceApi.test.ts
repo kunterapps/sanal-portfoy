@@ -184,7 +184,7 @@ describe('fund allocation', () => {
     expect(result).toMatchObject({ status: 200, body: { fxPct: 90 } });
     const [url, init] = fetchFn.mock.calls[0] as unknown as [string, RequestInit];
     expect(url).toBe('https://www.tefas.gov.tr/api/funds/dagilimSiraliGetirT');
-    expect(JSON.parse(String(init.body))).toMatchObject({ fonTipi: 'YAT', fonKodu: 'AFT', basTarih: '20261024', bitTarih: '20261024', bitSira: 100000 });
+    expect(JSON.parse(String(init.body))).toMatchObject({ fonTipi: 'YAT', fonKodu: null, basTarih: '20261024', bitTarih: '20261024', bitSira: 100000 });
     await service.getFundAllocation('AFT', 'YAT');
     expect(fetchFn).toHaveBeenCalledTimes(1);
   });
@@ -206,6 +206,16 @@ describe('fund allocation', () => {
     expect(JSON.parse(String((fetchFn.mock.calls[1] as unknown as [string, RequestInit])[1].body)).basTarih).toBe('20261023');
     expect((await service.getFundAllocation('AAA', 'YAT'))?.fxPct).toBe(10);
     expect(fetchFn).toHaveBeenCalledTimes(2);
+  });
+
+  it('shares one TEFAS request between concurrent lookups', async () => {
+    const fetchFn = vi.fn(async () =>
+      jsonResponse({ resultList: [{ fonKodu: 'IJC', tarih: '2026-10-23', yhs: 5 }, { fonKodu: 'TMG', tarih: '2026-10-23', eut: 4 }] })
+    );
+    const service = createPriceService(fetchFn as unknown as typeof fetch, () => new Date(2026, 9, 24).getTime());
+    const [ijc, tmg] = await Promise.all([service.getFundAllocation('IJC', 'YAT'), service.getFundAllocation('TMG', 'YAT')]);
+    expect([ijc?.fxPct, tmg?.fxPct]).toEqual([5, 4]);
+    expect(fetchFn).toHaveBeenCalledTimes(1);
   });
 });
 
