@@ -54,6 +54,8 @@ export interface PortfolioAsset {
   realizedProfit?: number;
   /** TEFAS/BEFAS funds: share of the fund's portfolio in FX, gold or foreign securities (0–100) */
   fxExposurePct?: number;
+  /** When fxExposurePct was last fetched (ISO) */
+  fxExposureUpdatedAt?: string;
 }
 
 export interface ExchangeRates {

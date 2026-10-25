@@ -295,7 +295,8 @@ export function createPriceService(fetchFn: FetchFn = fetch, now: () => number =
     return fundDetails.get(`tefas:${kind}:${code.trim().toUpperCase()}`);
   }
 
-  const ALLOCATION_TTL = 6 * 3_600_000;
+  // TEFAS breakdowns are monthly reports; one fetch a day is plenty
+  const ALLOCATION_TTL = 24 * 3_600_000;
   const allocationLists = new Map<string, { expires: number; funds: Map<string, FundAllocation> }>();
   const allocationLoads = new Map<string, Promise<Map<string, FundAllocation>>>();
 

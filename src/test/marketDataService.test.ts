@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { batchUpdatePortfolioPrices, fetchLivePriceForAsset, parseTurkishNumber, quoteInCurrency } from '../services/marketDataService';
+import { batchUpdatePortfolioPrices, fetchLivePriceForAsset, needsFxExposure, parseTurkishNumber, quoteInCurrency } from '../services/marketDataService';
 import { makeAsset, RATES } from './fixtures';
 
 describe('parseTurkishNumber', () => {
@@ -90,5 +90,20 @@ describe('fetchLivePriceForAsset (crypto)', () => {
     const asset = makeAsset({ category: 'CRYPTO', symbol: 'BTCUSDT', currentCurrency: 'USD' });
     expect(await fetchLivePriceForAsset(asset, RATES)).toEqual({ price: 100_000, success: true });
     expect(String(fetchMock.mock.calls[0][0])).toContain('symbol=BTCUSDT');
+  });
+});
+
+describe('needsFxExposure', () => {
+  const now = Date.parse('2026-10-25T12:00:00Z');
+  it('asks for funds with no share or a week-old one, never for other assets', () => {
+    expect(needsFxExposure(makeAsset({ category: 'TEFAS' }), now)).toBe(true);
+    expect(
+      needsFxExposure(makeAsset({ category: 'BEFAS', fxExposurePct: 40, fxExposureUpdatedAt: '2026-10-20T12:00:00Z' }), now)
+    ).toBe(false);
+    expect(
+      needsFxExposure(makeAsset({ category: 'TEFAS', fxExposurePct: 40, fxExposureUpdatedAt: '2026-10-17T12:00:00Z' }), now)
+    ).toBe(true);
+    expect(needsFxExposure(makeAsset({ category: 'TEFAS', fxExposurePct: 40 }), now)).toBe(true);
+    expect(needsFxExposure(makeAsset({ category: 'BIST' }), now)).toBe(false);
   });
 });

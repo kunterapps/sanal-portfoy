@@ -209,6 +209,17 @@ export function fetchFundQuote(code: string, kind: 'YAT' | 'EMK'): Promise<Serve
   return fetchServerQuote(`/api/fund?code=${encodeURIComponent(code.trim().toUpperCase())}&kind=${kind}`);
 }
 
+/** A fund's foreign-currency share is re-fetched at most this often. */
+export const FX_EXPOSURE_MAX_AGE_MS = 7 * 86_400_000;
+
+/** True for a TEFAS/BEFAS fund whose foreign-currency share is missing or older than a week. */
+export function needsFxExposure(asset: PortfolioAsset, nowMs = Date.now()): boolean {
+  if (asset.category !== 'TEFAS' && asset.category !== 'BEFAS') return false;
+  if (asset.fxExposurePct === undefined || !asset.fxExposureUpdatedAt) return true;
+  const fetched = Date.parse(asset.fxExposureUpdatedAt);
+  return !(fetched > nowMs - FX_EXPOSURE_MAX_AGE_MS);
+}
+
 /** Foreign-currency share (0–100) of a fund's portfolio, or null if unknown. */
 export async function fetchFundFxExposure(code: string, kind: 'YAT' | 'EMK'): Promise<number | null> {
   try {
@@ -341,13 +352,13 @@ export async function batchUpdatePortfolioPrices(
   let failedCount = 0;
 
   const promises = assets.map(async (asset) => {
-    const isFund = asset.category === 'TEFAS' || asset.category === 'BEFAS';
     const [result, fxPct] = await Promise.all([
       fetchLivePriceForAsset(asset, rates),
-      isFund ? fetchFundFxExposure(asset.symbol, asset.category === 'BEFAS' ? 'EMK' : 'YAT') : null,
+      needsFxExposure(asset) ? fetchFundFxExposure(asset.symbol, asset.category === 'BEFAS' ? 'EMK' : 'YAT') : null,
     ]);
-    // Keep the last known share when TEFAS doesn't answer
-    const withFx = fxPct !== null ? { ...asset, fxExposurePct: fxPct } : asset;
+    // Keep the last known share when it's recent or TEFAS doesn't answer
+    const withFx =
+      fxPct !== null ? { ...asset, fxExposurePct: fxPct, fxExposureUpdatedAt: new Date().toISOString() } : asset;
     if (!result.success) {
       failedCount++;
       // Keep the last known price but flag it so the UI can show it's outdated
