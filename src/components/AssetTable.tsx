@@ -35,6 +35,15 @@ interface AssetTableProps {
 type SortField = 'symbol' | 'value' | 'share' | 'profit' | 'price' | 'quantity';
 type SortDirection = 'asc' | 'desc';
 
+const SORT_OPTIONS: { field: SortField; label: string }[] = [
+  { field: 'value', label: 'Değer' },
+  { field: 'profit', label: 'Kâr / Zarar' },
+  { field: 'share', label: 'Pay' },
+  { field: 'symbol', label: 'Sembol' },
+  { field: 'price', label: 'Fiyat' },
+  { field: 'quantity', label: 'Miktar' },
+];
+
 export const AssetTable: React.FC<AssetTableProps> = ({
   assets,
   rates,
@@ -139,7 +148,7 @@ export const AssetTable: React.FC<AssetTableProps> = ({
       {/* Table Toolbar & Category Filter Tabs */}
       <div className="p-4 sm:p-5 border-b border-slate-800 flex flex-col-reverse lg:flex-row lg:items-start justify-between gap-3">
         {/* Tabs */}
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="no-scrollbar -mx-4 px-4 sm:mx-0 sm:px-0 flex items-center gap-2 overflow-x-auto sm:flex-wrap sm:overflow-visible">
           {tabs.map((tab) => {
             const count = tab.key === 'ALL'
               ? assets.length
@@ -152,7 +161,7 @@ export const AssetTable: React.FC<AssetTableProps> = ({
                 key={tab.key}
                 type="button"
                 onClick={() => setActiveTab(tab.key)}
-                className={`h-9 px-3 text-sm font-medium rounded-lg whitespace-nowrap transition-colors flex items-center gap-2 border ${
+                className={`h-9 px-3 text-sm font-medium rounded-lg whitespace-nowrap transition-colors flex shrink-0 items-center gap-2 border ${
                   activeTab === tab.key
                     ? 'bg-indigo-600 border-indigo-600 text-white shadow-sm shadow-indigo-600/30'
                     : 'text-slate-300 hover:text-white bg-slate-900/60 border-slate-800 hover:bg-slate-800/60'
@@ -169,21 +178,168 @@ export const AssetTable: React.FC<AssetTableProps> = ({
           })}
         </div>
 
+        <div className="flex items-center gap-2 shrink-0 w-full lg:w-64">
         {/* Search Input */}
-        <div className="relative shrink-0 w-full lg:w-64">
+        <div className="relative flex-1 min-w-0">
           <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Sembol veya varlık ara..."
+            placeholder="Varlık ara..."
             className="w-full h-9 bg-slate-900 border border-slate-800 text-sm text-slate-200 placeholder:text-slate-500 pl-9 pr-3 rounded-lg focus:outline-none focus:border-indigo-500 transition-colors"
           />
         </div>
+
+        {/* Sort control for the card list (the table sorts via its headers) */}
+        <div className="md:hidden flex items-center shrink-0">
+          <select
+            value={sortField}
+            onChange={(e) => setSortField(e.target.value as SortField)}
+            aria-label="Sıralama"
+            className="h-9 bg-slate-900 border border-slate-800 text-sm text-slate-200 pl-2 pr-1 rounded-l-lg focus:outline-none focus:border-indigo-500"
+          >
+            {SORT_OPTIONS.map((o) => (
+              <option key={o.field} value={o.field}>{o.label}</option>
+            ))}
+          </select>
+          <button
+            type="button"
+            onClick={() => setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc')}
+            aria-label={sortDirection === 'desc' ? 'Azalan sıralama' : 'Artan sıralama'}
+            className="h-9 w-9 inline-flex items-center justify-center bg-slate-900 border border-l-0 border-slate-800 text-slate-300 rounded-r-lg"
+          >
+            {sortDirection === 'desc' ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
+          </button>
+        </div>
+        </div>
       </div>
 
-      {/* Responsive Table */}
-      <div className="overflow-x-auto">
+      {/* Card list for phones */}
+      <ul className="md:hidden divide-y divide-slate-800/60">
+        {filteredAndSortedAssets.length === 0 ? (
+          <li className="text-center py-12 px-4 text-sm text-slate-500">
+            {searchQuery ? 'Arama kriterlerine uygun varlık bulunamadı.' : 'Bu kategoride henüz bir varlık eklenmedi.'}
+          </li>
+        ) : (
+          filteredAndSortedAssets.map((asset) => {
+            const isPositive = asset.pl.profitPercent >= 0;
+            const isGold = asset.category === 'COMMODITY' && asset.goldType;
+            const goldDetails = isGold ? getGoldDisplayDetails(asset.goldType!) : null;
+            const plColor = isPositive ? 'text-emerald-400' : 'text-rose-400';
+
+            return (
+              <li key={asset.id} className={`px-4 py-3.5 space-y-3 ${isClosedPosition(asset) ? 'opacity-60' : ''}`}>
+                {/* Symbol, value and P/L */}
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-start gap-2.5 min-w-0">
+                    <div
+                      className="w-2 h-2 rounded-full mt-2 shrink-0"
+                      style={{ backgroundColor: CATEGORY_METADATA[asset.category]?.color || '#94a3b8' }}
+                    />
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span className="font-semibold text-slate-100">{asset.symbol}</span>
+                        {isClosedPosition(asset) && (
+                          <span className="text-xs px-1.5 rounded bg-slate-800 text-slate-300 border border-slate-700">
+                            Kapandı
+                          </span>
+                        )}
+                        {isGold && (
+                          <span className="text-xs px-1.5 rounded bg-amber-950/40 text-amber-300 border border-amber-900/40">
+                            {goldDetails?.shortName}
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-xs text-slate-400 truncate mt-0.5">{asset.name}</div>
+                    </div>
+                  </div>
+                  <div className="text-right tabular-nums shrink-0">
+                    <div className="font-semibold text-indigo-300">
+                      <span className="text-xs font-medium text-slate-500 mr-1.5" title="Portföy payı">
+                        %{asset.portfolioSharePercent.toFixed(1)}
+                      </span>
+                      {formatCurrency(asset.displayValue, baseCurrency, 0)}
+                    </div>
+                    <div className={`text-xs font-medium ${plColor}`}>
+                      {isPositive ? '+' : ''}{formatCurrency(asset.displayProfit, baseCurrency, 0)} · {formatPercent(asset.pl.profitPercent)}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Quantity, cost, price, share */}
+                <div className="grid grid-cols-3 gap-2 text-xs tabular-nums">
+                  <div className="min-w-0">
+                    <div className="text-slate-500">Miktar</div>
+                    <div className="text-slate-200 font-medium truncate">
+                      {formatNumber(asset.quantity, asset.quantity % 1 === 0 ? 0 : 4)}{' '}
+                      <span className="text-slate-500">{isGold && !goldDetails?.isUnitPiece ? 'gr' : 'ad.'}</span>
+                    </div>
+                  </div>
+                  <div className="min-w-0">
+                    <div className="text-slate-500">Ort. Maliyet</div>
+                    <div className="text-slate-300 truncate">{formatCurrency(asset.costPrice, asset.costCurrency, 2)}</div>
+                  </div>
+                  <div className="min-w-0 text-right">
+                    <div className="text-slate-500">Anlık Fiyat</div>
+                    <div className="text-white font-medium truncate">
+                      {formatCurrency(asset.currentPrice, asset.currentCurrency, 2)}
+                    </div>
+                  </div>
+                </div>
+
+                {asset.priceStale && (
+                  <div className="flex items-center gap-1 text-xs text-amber-400">
+                    <AlertTriangle className="w-3 h-3" />
+                    Son güncellemede canlı fiyat alınamadı, gösterilen fiyat eski.
+                  </div>
+                )}
+                {!!asset.realizedProfit && (
+                  <div className={`text-xs ${asset.realizedProfit > 0 ? 'text-emerald-500/80' : 'text-rose-500/80'}`}>
+                    Gerçekleşmiş K/Z: {asset.realizedProfit > 0 ? '+' : '-'}
+                    {formatCurrency(Math.abs(asset.realizedProfit), asset.costCurrency, 0)}
+                  </div>
+                )}
+
+                {/* Actions */}
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => onOpenTransactions(asset)}
+                    className="flex-1 h-9 inline-flex items-center justify-center gap-1.5 text-xs font-semibold text-emerald-300 bg-emerald-950/30 active:bg-emerald-950/60 border border-emerald-900/40 rounded-lg"
+                  >
+                    <ArrowLeftRight className="w-4 h-4" />
+                    Alış / Satış
+                  </button>
+                  <button
+                    onClick={() => onQuickPriceEdit(asset)}
+                    className="flex-1 h-9 inline-flex items-center justify-center gap-1.5 text-xs font-semibold text-indigo-300 bg-indigo-950/30 active:bg-indigo-950/60 border border-indigo-900/40 rounded-lg"
+                  >
+                    <DollarSign className="w-4 h-4" />
+                    Fiyat
+                  </button>
+                  <button
+                    onClick={() => onEditAsset(asset)}
+                    aria-label="Varlığı Düzenle"
+                    className="w-9 h-9 shrink-0 inline-flex items-center justify-center text-slate-300 bg-slate-800/80 active:bg-slate-700 rounded-lg"
+                  >
+                    <Edit2 className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => onDeleteAsset(asset.id)}
+                    aria-label="Varlığı Sil"
+                    className="w-9 h-9 shrink-0 inline-flex items-center justify-center text-rose-400 bg-rose-950/20 active:bg-rose-950/50 rounded-lg"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              </li>
+            );
+          })
+        )}
+      </ul>
+
+      {/* Table from md up */}
+      <div className="hidden md:block overflow-x-auto">
         <table className="w-full text-left text-sm">
           <thead className="bg-slate-900/80 text-slate-400 text-xs font-semibold whitespace-nowrap border-b border-slate-800">
             <tr>
@@ -424,11 +580,11 @@ export const AssetTable: React.FC<AssetTableProps> = ({
       </div>
 
       {/* Table Footer Summary */}
-      <div className="px-5 py-3 bg-slate-900/60 border-t border-slate-800 text-sm text-slate-400 flex flex-wrap items-center justify-between gap-2">
+      <div className="px-4 sm:px-5 py-3 bg-slate-900/60 border-t border-slate-800 text-sm text-slate-400 flex flex-wrap items-center justify-between gap-2">
         <span className="tabular-nums">
           Gösterilen Varlık: {filteredAndSortedAssets.length} / {assets.length}
         </span>
-        <span className="text-xs text-slate-500">
+        <span className="hidden sm:inline text-xs text-slate-500">
           Tüm veriler tarayıcınızın yerel belleğinde (localStorage) saklanmaktadır
         </span>
       </div>

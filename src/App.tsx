@@ -321,7 +321,7 @@ export default function App() {
     <div className="min-h-screen bg-[#090d16] text-slate-100 flex flex-col selection:bg-indigo-500 selection:text-white">
       {/* Toast Notification */}
       {toastMessage && (
-        <div className="fixed bottom-6 right-6 z-50 bg-slate-900 border border-indigo-500/50 text-white px-4 py-2.5 rounded-xl shadow-2xl text-sm font-medium flex items-center gap-2">
+        <div className="fixed bottom-4 inset-x-4 sm:inset-x-auto sm:bottom-6 sm:right-6 z-50 mb-[env(safe-area-inset-bottom)] bg-slate-900 border border-indigo-500/50 text-white px-4 py-2.5 rounded-xl shadow-2xl text-sm font-medium flex items-center gap-2">
           <span className="w-2 h-2 rounded-full bg-indigo-400" />
           <span>{toastMessage}</span>
         </div>
@@ -340,7 +340,7 @@ export default function App() {
       />
 
       {/* Main Viewport Container */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-8 space-y-4 sm:space-y-8">
         {assets.length === 0 ? (
           // Empty State view when portfolio has 0 assets
           <div className="pt-6">
@@ -401,9 +401,9 @@ export default function App() {
       </main>
 
       {/* Footer */}
-      <footer className="border-t border-slate-900 bg-[#090d16] py-6 text-xs text-slate-500">
+      <footer className="border-t border-slate-900 bg-[#090d16] py-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] text-xs text-slate-500">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center justify-center gap-2 text-center">
             <span className="font-bold text-slate-400">PORTFÖYÜM</span>
             <span>·</span>
             <span>Kişisel Yatırım ve Portföy Takip Platformu</span>

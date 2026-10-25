@@ -1,7 +1,21 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { TimeRange, Currency } from '../types/portfolio';
 import { formatCurrency, formatPercent } from '../utils/portfolioCalculations';
 import { TrendPoint } from '../utils/snapshots';
+
+const NARROW_QUERY = '(max-width: 639px)';
+
+// Phones get a narrower drawing area so the chart keeps a usable height
+const useIsNarrow = () => {
+  const [narrow, setNarrow] = useState(() => window.matchMedia(NARROW_QUERY).matches);
+  useEffect(() => {
+    const mq = window.matchMedia(NARROW_QUERY);
+    const onChange = () => setNarrow(mq.matches);
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, []);
+  return narrow;
+};
 
 interface PortfolioTrendChartProps {
   data: TrendPoint[];
@@ -19,6 +33,7 @@ export const PortfolioTrendChart: React.FC<PortfolioTrendChartProps> = ({
   hasAssets,
 }) => {
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
+  const isNarrow = useIsNarrow();
 
   const ranges: { key: TimeRange; label: string }[] = [
     { key: '1W', label: '1H' },
@@ -50,7 +65,7 @@ export const PortfolioTrendChart: React.FC<PortfolioTrendChartProps> = ({
 
   if (hasAssets && data.length < 2) {
     return (
-      <div className="bg-[#0f172a] border border-slate-800 rounded-2xl p-6">
+      <div className="bg-[#0f172a] border border-slate-800 rounded-2xl p-4 sm:p-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
           <h2 className="text-base font-semibold text-white">Zaman İçinde Değer Değişimi</h2>
           {rangeButtons}
@@ -70,7 +85,7 @@ export const PortfolioTrendChart: React.FC<PortfolioTrendChartProps> = ({
 
   if (!hasAssets || data.length === 0) {
     return (
-      <div className="bg-[#0f172a] border border-slate-800 rounded-2xl p-6 text-center py-14">
+      <div className="bg-[#0f172a] border border-slate-800 rounded-2xl p-4 sm:p-6 text-center py-14">
         <div className="w-12 h-12 mx-auto rounded-full bg-slate-900 border border-slate-800 flex items-center justify-center text-slate-500 mb-3">
           📈
         </div>
@@ -83,9 +98,9 @@ export const PortfolioTrendChart: React.FC<PortfolioTrendChartProps> = ({
   }
 
   // Coordinates and scale
-  const width = 800;
+  const width = isNarrow ? 420 : 800;
   const height = 240;
-  const paddingX = 40;
+  const paddingX = isNarrow ? 16 : 40;
   const paddingY = 30;
 
   const values = data.map((d) => (baseCurrency === 'TRY' ? d.valueTRY : d.valueUSD));
@@ -147,14 +162,30 @@ export const PortfolioTrendChart: React.FC<PortfolioTrendChartProps> = ({
   const activeProfit = activeVal - activeCost;
   const activeProfitPercent = activeCost > 0 ? (activeProfit / activeCost) * 100 : 0;
 
+  // Pointer events cover mouse hover as well as tapping/dragging on touch screens
+  const handlePointer = (e: React.PointerEvent<SVGSVGElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const relX = ((e.clientX - rect.left) / rect.width) * width;
+    let closestIdx = 0;
+    let minDist = Infinity;
+    data.forEach((_, i) => {
+      const dist = Math.abs(getX(i) - relX);
+      if (dist < minDist) {
+        minDist = dist;
+        closestIdx = i;
+      }
+    });
+    setHoverIndex(closestIdx);
+  };
+
   return (
-    <div className="bg-[#0f172a] border border-slate-800 rounded-2xl p-6 relative">
+    <div className="bg-[#0f172a] border border-slate-800 rounded-2xl p-4 sm:p-6 relative">
       {/* Header and Period Filter */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
         <div>
           <div className="flex items-center gap-2">
             <h2 className="text-base font-semibold text-white">Zaman İçinde Değer Değişimi</h2>
-            <span className="text-xs px-2 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-400 tabular-nums">
+            <span className="text-xs px-2 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-400 tabular-nums whitespace-nowrap">
               {baseCurrency} Bazında
             </span>
           </div>
@@ -194,20 +225,8 @@ export const PortfolioTrendChart: React.FC<PortfolioTrendChartProps> = ({
           viewBox={`0 0 ${width} ${height}`}
           className="w-full h-56 sm:h-64 cursor-crosshair select-none"
           onMouseLeave={() => setHoverIndex(null)}
-          onMouseMove={(e) => {
-            const rect = e.currentTarget.getBoundingClientRect();
-            const relX = ((e.clientX - rect.left) / rect.width) * width;
-            let closestIdx = 0;
-            let minDist = Infinity;
-            data.forEach((_, i) => {
-              const dist = Math.abs(getX(i) - relX);
-              if (dist < minDist) {
-                minDist = dist;
-                closestIdx = i;
-              }
-            });
-            setHoverIndex(closestIdx);
-          }}
+          onPointerDown={handlePointer}
+          onPointerMove={handlePointer}
         >
           <defs>
             <linearGradient id="trendGradient" x1="0" y1="0" x2="0" y2="1">
@@ -281,7 +300,10 @@ export const PortfolioTrendChart: React.FC<PortfolioTrendChartProps> = ({
 
           {/* X Axis Labels */}
           {data.map((d, i) => {
-            if (i % Math.ceil(data.length / 6) === 0 || i === data.length - 1) {
+            const step = Math.ceil(data.length / (isNarrow ? 4 : 6));
+            const last = data.length - 1;
+            // Skip a regular label that would collide with the final "today" label
+            if (i === last || (i % step === 0 && last - i >= step / 2)) {
               return (
                 <text
                   key={i}
@@ -314,7 +336,7 @@ export const PortfolioTrendChart: React.FC<PortfolioTrendChartProps> = ({
             <span>Yatırım Maliyeti</span>
           </div>
         </div>
-        <div className="text-slate-500 tabular-nums">
+        <div className="hidden sm:block text-slate-500 tabular-nums">
           Grafik üzerinde imleç ile gezinebilirsiniz
         </div>
       </div>

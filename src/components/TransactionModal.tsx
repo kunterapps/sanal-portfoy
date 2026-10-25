@@ -92,8 +92,8 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
   const history = sortTransactions(transactions).reverse();
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
-      <div className="bg-[#0f172a] border border-slate-800 rounded-2xl w-full max-w-xl p-6 shadow-2xl space-y-5 my-8">
+    <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex justify-center p-3 sm:p-4 overflow-y-auto overscroll-contain">
+      <div className="bg-[#0f172a] border border-slate-800 rounded-2xl w-full max-w-xl p-4 sm:p-6 shadow-2xl space-y-5 my-auto">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-slate-800 pb-4">
           <div>
@@ -264,10 +264,10 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                 <thead className="text-slate-500">
                   <tr>
                     <th className="text-left font-medium pb-1.5">Tarih</th>
-                    <th className="text-left font-medium pb-1.5">İşlem</th>
-                    <th className="text-right font-medium pb-1.5">Miktar</th>
-                    <th className="text-right font-medium pb-1.5">Fiyat</th>
-                    <th className="text-right font-medium pb-1.5">Tutar</th>
+                    <th className="text-left font-medium pb-1.5 pl-2">İşlem</th>
+                    <th className="text-right font-medium pb-1.5 pl-2">Miktar</th>
+                    <th className="hidden sm:table-cell text-right font-medium pb-1.5 pl-2">Fiyat</th>
+                    <th className="text-right font-medium pb-1.5 pl-2">Tutar</th>
                     <th className="pb-1.5" />
                   </tr>
                 </thead>
@@ -275,13 +275,13 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                   {history.map((tx) => (
                     <tr key={tx.id}>
                       <td className="py-1.5 text-slate-300">{formatDay(tx.date)}</td>
-                      <td className={`py-1.5 font-semibold ${tx.type === 'BUY' ? 'text-emerald-400' : 'text-rose-400'}`}>
+                      <td className={`py-1.5 pl-2 font-semibold ${tx.type === 'BUY' ? 'text-emerald-400' : 'text-rose-400'}`}>
                         {tx.type === 'BUY' ? 'Alış' : 'Satış'}
                         {tx.notes && <span className="text-slate-500 font-normal"> · {tx.notes}</span>}
                       </td>
-                      <td className="py-1.5 text-right text-slate-200">{formatQty(tx.quantity)}</td>
-                      <td className="py-1.5 text-right text-slate-200">{formatCurrency(tx.price, cur, 2)}</td>
-                      <td className="py-1.5 text-right text-slate-300">
+                      <td className="py-1.5 pl-2 text-right text-slate-200">{formatQty(tx.quantity)}</td>
+                      <td className="hidden sm:table-cell py-1.5 pl-2 text-right text-slate-200">{formatCurrency(tx.price, cur, 2)}</td>
+                      <td className="py-1.5 pl-2 text-right text-slate-300">
                         {formatCurrency(tx.quantity * tx.price, cur, 2)}
                         {tx.fee ? <div className="text-slate-500">+{formatCurrency(tx.fee, cur, 2)} kom.</div> : null}
                       </td>
@@ -289,7 +289,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                         <button
                           onClick={() => handleDelete(tx)}
                           title="İşlemi sil"
-                          className="p-1 text-slate-500 hover:text-rose-400"
+                          className="p-2 sm:p-1 text-slate-500 hover:text-rose-400"
                         >
                           <Trash2 className="w-3 h-3" />
                         </button>

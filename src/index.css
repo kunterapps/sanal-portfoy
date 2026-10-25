@@ -30,6 +30,23 @@
   button:disabled {
     cursor: default;
   }
+
+  /* iOS Safari zooms the page when focusing a field with text under 16px */
+  @media (max-width: 639px) {
+    input,
+    select,
+    textarea {
+      font-size: 16px !important;
+    }
+  }
+}
+
+/* Horizontally scrollable rows (tabs, rate strip) without a visible scrollbar */
+.no-scrollbar {
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
 }
 
 .tabular-nums {

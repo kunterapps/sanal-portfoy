@@ -35,8 +35,8 @@ export const QuickPriceModal: React.FC<QuickPriceModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="bg-[#0f172a] border border-slate-800 rounded-2xl w-full max-w-sm p-5 shadow-2xl space-y-4">
+    <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex justify-center p-3 sm:p-4 overflow-y-auto overscroll-contain">
+      <div className="bg-[#0f172a] border border-slate-800 rounded-2xl w-full max-w-sm p-5 shadow-2xl space-y-4 my-auto">
         <div className="flex items-center justify-between border-b border-slate-800 pb-3">
           <div>
             <h3 className="text-sm font-bold text-white tracking-tight">Fiyatı Elle Güncelle</h3>
