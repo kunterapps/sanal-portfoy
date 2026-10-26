@@ -7,22 +7,23 @@ import {
   AssetCategory 
 } from '../types/portfolio';
 import { detectCashCurrency } from './currency';
+import type { UnitPrices } from './snapshots';
 
 export const CATEGORY_METADATA: Record<AssetCategory, { label: string; color: string; shortLabel: string }> = {
-  FOREIGN_STOCK: { label: 'Yabancı Hisse & ETF', shortLabel: 'Yabancı Hisse', color: '#6366F1' }, // Indigo
+  FOREIGN_STOCK: { label: 'Yabancı Hisse & ETF', shortLabel: 'Yabancı', color: '#6366F1' }, // Indigo
   BIST: { label: 'BIST Hisseleri', shortLabel: 'BIST', color: '#0EA5E9' },           // Sky Blue
   TEFAS: { label: 'TEFAS Menkul Fonları', shortLabel: 'TEFAS', color: '#10B981' },   // Emerald
-  BEFAS: { label: 'BEFAS Emeklilik Fonları', shortLabel: 'BEFAS', color: '#14B8A6' }, // Teal
-  COMMODITY: { label: 'Altın & Kıymetli Maden', shortLabel: 'Altın/Emtia', color: '#F59E0B' }, // Amber/Gold
-  CASH: { label: 'Nakit & Döviz', shortLabel: 'Nakit', color: '#8B5CF6' },            // Purple
-  CRYPTO: { label: 'Kripto Varlıklar', shortLabel: 'Kripto', color: '#F97316' },      // Orange (Bitcoin)
+  BEFAS: { label: 'BEFAS Emeklilik Fonları', shortLabel: 'BEFAS', color: '#84CC16' }, // Lime
+  COMMODITY: { label: 'Altın & Kıymetli Maden', shortLabel: 'Altın', color: '#F59E0B' }, // Amber/Gold
+  CASH: { label: 'Nakit & Döviz', shortLabel: 'Nakit', color: '#94A3B8' },            // Slate
+  CRYPTO: { label: 'Kripto Varlıklar', shortLabel: 'Kripto', color: '#EC4899' },      // Pink
 };
 
 export const CURRENCY_METADATA: Record<Currency, { label: string; symbol: string; color: string }> = {
-  TRY: { label: 'Türk Lirası', symbol: '₺', color: '#0EA5E9' },
-  USD: { label: 'Amerikan Doları', symbol: '$', color: '#10B981' },
-  EUR: { label: 'Euro', symbol: '€', color: '#F59E0B' },
-  GBP: { label: 'İngiliz Sterlini', symbol: '£', color: '#8B5CF6' },
+  TRY: { label: 'Türk Lirası', symbol: '₺', color: '#A78BFA' },
+  USD: { label: 'Amerikan Doları', symbol: '$', color: '#22D3EE' },
+  EUR: { label: 'Euro', symbol: '€', color: '#FB923C' },
+  GBP: { label: 'İngiliz Sterlini', symbol: '£', color: '#F472B6' },
 };
 
 /**
@@ -240,6 +241,18 @@ export function calculateCurrencySummaries(
   });
 
   return summaries.filter((s) => s.valueTRY > 0);
+}
+
+/** Unit price of every held asset in TRY and USD, for daily snapshots. */
+export function calculateUnitPrices(assets: PortfolioAsset[], rates: ExchangeRates): UnitPrices {
+  const prices: UnitPrices = { TRY: {}, USD: {} };
+  assets.forEach((asset) => {
+    if (asset.quantity <= 0 || asset.currentPrice <= 0) return;
+    const pl = getAssetProfitLoss(asset, rates);
+    prices.TRY[asset.id] = pl.valueTRY / asset.quantity;
+    prices.USD[asset.id] = pl.valueUSD / asset.quantity;
+  });
+  return prices;
 }
 
 /**

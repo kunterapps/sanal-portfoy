@@ -23,7 +23,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
   return (
     <header className="sticky top-0 z-40 w-full border-b border-slate-800 bg-[#090d16]/90 backdrop-blur-md transition-all">
-      <div className="max-w-7xl mx-auto flex items-center justify-between gap-3 sm:gap-6 px-4 sm:px-6 lg:px-8 h-14 sm:h-16">
+      <div className="max-w-[1600px] mx-auto flex items-center justify-between gap-3 sm:gap-6 px-4 sm:px-6 lg:px-8 h-14 sm:h-16">
         {/* Zone 1: Brand Wordmark */}
         <div className="flex items-center gap-3 shrink-0">
           <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-indigo-600 to-indigo-500 flex items-center justify-center font-bold text-white shadow-lg shadow-indigo-500/25">
@@ -35,7 +35,7 @@ export const Navbar: React.FC<NavbarProps> = ({
         </div>
 
         {/* Zone 2: Live Market Ticker */}
-        <div className="hidden lg:flex items-center gap-3 xl:gap-4 h-9 text-[13px] whitespace-nowrap tabular-nums text-slate-400 bg-slate-900/90 px-4 rounded-lg border border-slate-800/80 shadow-inner">
+        <div className="hidden xl:flex items-center gap-4 h-9 text-[13px] whitespace-nowrap tabular-nums text-slate-400 bg-slate-900/90 px-4 rounded-lg border border-slate-800/80 shadow-inner">
           <div className="flex items-center gap-1.5">
             <span className="text-slate-500 font-medium">USD/TRY</span>
             <span className="text-slate-200 font-semibold tabular-nums">₺{rates.USD_TRY.toFixed(2)}</span>
@@ -87,8 +87,8 @@ export const Navbar: React.FC<NavbarProps> = ({
       </div>
 
       {/* Compact rate strip for screens where the ticker above is hidden */}
-      <div className="lg:hidden border-t border-slate-800/80">
-        <div className="no-scrollbar max-w-7xl mx-auto flex items-center gap-4 overflow-x-auto px-4 sm:px-6 h-9 text-xs whitespace-nowrap tabular-nums">
+      <div className="xl:hidden border-t border-slate-800/80">
+        <div className="no-scrollbar max-w-[1600px] mx-auto flex items-center gap-4 overflow-x-auto px-4 sm:px-6 h-9 text-xs whitespace-nowrap tabular-nums">
           <span className="text-slate-500">USD <span className="text-slate-200 font-semibold">₺{rates.USD_TRY.toFixed(2)}</span></span>
           <span className="text-slate-500">EUR <span className="text-slate-200 font-semibold">₺{rates.EUR_TRY.toFixed(2)}</span></span>
           <span className="text-slate-500">Gram <span className="text-amber-400 font-semibold">{formatCurrency(rates.GRAM_GOLD_TRY, 'TRY', 0)}</span></span>

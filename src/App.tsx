@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { RefreshCw } from 'lucide-react';
 import { 
   PortfolioAsset, 
   AssetTransaction,
@@ -8,9 +9,8 @@ import {
   PortfolioSnapshot
 } from './types/portfolio';
 import { Navbar } from './components/Navbar';
-import { ExecutiveSummary } from './components/ExecutiveSummary';
 import { PortfolioTrendChart } from './components/PortfolioTrendChart';
-import { DistributionCharts } from './components/DistributionCharts';
+import { SummaryPanel, AllocationPanel } from './components/PortfolioSidebar';
 import { AssetTable } from './components/AssetTable';
 import { AssetModal } from './components/AssetModal';
 import { QuickPriceModal } from './components/QuickPriceModal';
@@ -30,10 +30,12 @@ import {
 import { 
   calculatePortfolioTotals, 
   calculateCategorySummaries, 
-  calculateCurrencySummaries 
+  calculateCurrencySummaries,
+  calculateUnitPrices,
 } from './utils/portfolioCalculations';
 import {
   buildTrendSeries,
+  calculateAssetDayChanges,
   calculateDailyChange,
   sanitizeSnapshots,
   upsertTodaySnapshot,
@@ -353,18 +355,33 @@ export default function App() {
     return calculateCurrencySummaries(assets, rates);
   }, [assets, rates]);
 
-  // Record today's value whenever it changes
+  const unitPrices = useMemo(() => calculateUnitPrices(assets, rates), [assets, rates]);
+
+  // Record today's value (and each asset's unit price) whenever it changes
   useEffect(() => {
     if (assets.length === 0) return;
-    setSnapshots((prev) => upsertTodaySnapshot(prev, totals));
-  }, [assets.length, totals]);
+    setSnapshots((prev) => upsertTodaySnapshot(prev, totals, new Date(), unitPrices));
+  }, [assets.length, totals, unitPrices]);
 
   const dailyChange = useMemo(() => calculateDailyChange(snapshots, totals), [snapshots, totals]);
+
+  const dayChanges = useMemo(
+    () => calculateAssetDayChanges(snapshots, unitPrices, baseCurrency === 'TRY' ? 'TRY' : 'USD'),
+    [snapshots, unitPrices, baseCurrency]
+  );
 
   const trendData = useMemo(
     () => buildTrendSeries(snapshots, totals, selectedRange),
     [snapshots, totals, selectedRange]
   );
+
+  const sparkData = useMemo(() => buildTrendSeries(snapshots, totals, '1M'), [snapshots, totals]);
+
+  const staleCount = assets.filter((a) => a.priceStale && a.quantity > 0).length;
+
+  const lastPriceTime = rates.lastUpdated
+    ? new Date(rates.lastUpdated).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })
+    : null;
 
   return (
     <div className="min-h-screen bg-[#090d16] text-slate-100 flex flex-col selection:bg-indigo-500 selection:text-white">
@@ -388,10 +405,8 @@ export default function App() {
         onOpenExportModal={() => setIsExportModalOpen(true)}
       />
 
-      {/* Main Viewport Container */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-8 space-y-4 sm:space-y-8">
-        {assets.length === 0 ? (
-          // Empty State view when portfolio has 0 assets
+      {assets.length === 0 ? (
+        <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-8">
           <div className="pt-6">
             <EmptyState
               onAddFirstAsset={() => {
@@ -401,42 +416,53 @@ export default function App() {
               onLoadDemoPortfolio={handleLoadDemoPortfolio}
             />
           </div>
-        ) : (
-          // Full Dashboard view when assets exist
-          <>
-            {/* 1. Executive Summary Cards */}
-            <ExecutiveSummary
-              totals={totals}
-              dailyChange={dailyChange}
-              baseCurrency={baseCurrency}
-              onToggleCurrency={setBaseCurrency}
-              isRefreshing={isRefreshing}
-              onRefresh={handleRefreshPrices}
-              lastUpdated={rates.lastUpdated}
-            />
+        </main>
+      ) : (
+        <div className="flex-1 w-full max-w-[1600px] mx-auto xl:grid xl:grid-cols-[20rem_minmax(0,1fr)]">
+          {/* Left panel from xl up (stacked above the table below that): summary always, allocation only when wide */}
+          <aside className="xl:border-r border-slate-800 bg-[#0b111e] xl:bg-transparent">
+            <div className="xl:sticky xl:top-16 xl:max-h-[calc(100vh-4rem)] xl:overflow-y-auto no-scrollbar px-4 sm:px-6 lg:px-8 xl:px-6 py-5 space-y-6">
+              <SummaryPanel
+                totals={totals}
+                dailyChange={dailyChange}
+                baseCurrency={baseCurrency}
+                onToggleCurrency={setBaseCurrency}
+                sparkData={sparkData}
+                staleCount={staleCount}
+              />
+              <div className="hidden xl:block border-t border-slate-800 pt-5">
+                <AllocationPanel
+                  categorySummaries={categorySummaries}
+                  currencySummaries={currencySummaries}
+                  baseCurrency={baseCurrency}
+                />
+              </div>
+            </div>
+          </aside>
 
-            {/* 2. Historical Portfolio Trend Performance Chart */}
-            <PortfolioTrendChart
-              data={trendData}
-              selectedRange={selectedRange}
-              onRangeChange={setSelectedRange}
-              baseCurrency={baseCurrency}
-              hasAssets={assets.length > 0}
-            />
+          <main className="min-w-0 px-4 sm:px-6 lg:px-8 py-4 sm:py-5 space-y-4 sm:space-y-6">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-baseline gap-3 min-w-0">
+                <h2 className="text-lg font-semibold text-white">Varlıklar</h2>
+                <span className="text-sm text-slate-500 tabular-nums truncate">
+                  {totals.assetCount} açık pozisyon{lastPriceTime ? ` · kurlar ${lastPriceTime}` : ''}
+                </span>
+              </div>
+              <button
+                onClick={handleRefreshPrices}
+                disabled={isRefreshing}
+                className="shrink-0 inline-flex items-center gap-2 h-8 px-3 text-sm font-medium text-slate-200 bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded-lg transition-colors"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin text-indigo-400' : 'text-slate-400'}`} />
+                <span className="hidden sm:inline">{isRefreshing ? 'Güncelleniyor...' : 'Fiyatları güncelle'}</span>
+              </button>
+            </div>
 
-            {/* 3. Distribution Analytics Charts */}
-            <DistributionCharts
-              categorySummaries={categorySummaries}
-              currencySummaries={currencySummaries}
-              baseCurrency={baseCurrency}
-              totalValueTRY={totals.totalValueTRY}
-            />
-
-            {/* 4. Asset Table with Tabs & Search */}
             <AssetTable
               assets={assets}
               rates={rates}
               baseCurrency={baseCurrency}
+              dayChanges={dayChanges}
               onEditAsset={(asset) => {
                 setEditingAsset(asset);
                 setIsAssetModalOpen(true);
@@ -445,13 +471,29 @@ export default function App() {
               onOpenTransactions={(asset) => setTransactionAssetId(asset.id)}
               onDeleteAsset={handleDeleteAsset}
             />
-          </>
-        )}
-      </main>
+
+            <PortfolioTrendChart
+              data={trendData}
+              selectedRange={selectedRange}
+              onRangeChange={setSelectedRange}
+              baseCurrency={baseCurrency}
+              hasAssets={assets.length > 0}
+            />
+
+            <section className="xl:hidden bg-[#0f172a] border border-slate-800 rounded-2xl p-4">
+              <AllocationPanel
+                categorySummaries={categorySummaries}
+                currencySummaries={currencySummaries}
+                baseCurrency={baseCurrency}
+              />
+            </section>
+          </main>
+        </div>
+      )}
 
       {/* Footer */}
       <footer className="border-t border-slate-900 bg-[#090d16] py-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] text-xs text-slate-500">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-4">
+        <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="flex flex-wrap items-center justify-center gap-2 text-center">
             <span className="font-bold text-slate-400">PORTFÖYÜM</span>
             <span>·</span>
