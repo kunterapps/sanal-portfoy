@@ -1,9 +1,13 @@
-import { ExchangeRates, GoldType } from '../types/portfolio';
+import { ExchangeRates, GoldType, PortfolioAsset } from '../types/portfolio';
 
 export interface GoldDefinition {
   type: GoldType;
   name: string;
   shortName: string;
+  /** Name shown in lists instead of the type code */
+  displayName: string;
+  /** One-line detail shown under displayName */
+  detail: string;
   weightGrams: number;
   karat: number;
   purity: number; // pure gold equivalent ratio
@@ -17,6 +21,8 @@ export const TURKISH_GOLD_DEFINITIONS: Record<GoldType, GoldDefinition> = {
     type: 'GRAM_24',
     name: 'Gram Altın (24 Ayar Has)',
     shortName: 'Gram (24K)',
+    displayName: 'Gram Altın',
+    detail: '24 ayar · gram',
     weightGrams: 1.0,
     karat: 24,
     purity: 1.0,
@@ -28,6 +34,8 @@ export const TURKISH_GOLD_DEFINITIONS: Record<GoldType, GoldDefinition> = {
     type: 'CEYREK',
     name: 'Çeyrek Altın (Eski/Yeni Tarihli)',
     shortName: 'Çeyrek Altın',
+    displayName: 'Çeyrek Altın',
+    detail: 'Eski/yeni tarihli · adet',
     weightGrams: 1.754,
     karat: 22,
     purity: 0.916,
@@ -39,6 +47,8 @@ export const TURKISH_GOLD_DEFINITIONS: Record<GoldType, GoldDefinition> = {
     type: 'YARIM',
     name: 'Yarım Altın',
     shortName: 'Yarım Altın',
+    displayName: 'Yarım Altın',
+    detail: 'adet',
     weightGrams: 3.508,
     karat: 22,
     purity: 0.916,
@@ -50,6 +60,8 @@ export const TURKISH_GOLD_DEFINITIONS: Record<GoldType, GoldDefinition> = {
     type: 'TAM',
     name: 'Tam Altın (Ziynet)',
     shortName: 'Tam Ziynet',
+    displayName: 'Tam Altın',
+    detail: 'Ziynet · adet',
     weightGrams: 7.016,
     karat: 22,
     purity: 0.916,
@@ -61,6 +73,8 @@ export const TURKISH_GOLD_DEFINITIONS: Record<GoldType, GoldDefinition> = {
     type: 'ATA_CUMHURIYET',
     name: 'Cumhuriyet / Ata Altını',
     shortName: 'Ata Altın',
+    displayName: 'Ata Altın',
+    detail: 'Cumhuriyet · adet',
     weightGrams: 7.216,
     karat: 22,
     purity: 0.916,
@@ -72,6 +86,8 @@ export const TURKISH_GOLD_DEFINITIONS: Record<GoldType, GoldDefinition> = {
     type: 'BILEZIK_22',
     name: '22 Ayar Bilezik / Hurda Gram',
     shortName: '22 Ayar Gram',
+    displayName: '22 Ayar Bilezik',
+    detail: 'gram',
     weightGrams: 1.0,
     karat: 22,
     purity: 0.916,
@@ -83,6 +99,8 @@ export const TURKISH_GOLD_DEFINITIONS: Record<GoldType, GoldDefinition> = {
     type: 'ONS_GOLD',
     name: 'Ons Altın (XAU / Troy Ounce)',
     shortName: 'Ons Altın',
+    displayName: 'Ons Altın',
+    detail: 'XAU · ons',
     weightGrams: 31.1035,
     karat: 24,
     purity: 1.0,
@@ -94,6 +112,8 @@ export const TURKISH_GOLD_DEFINITIONS: Record<GoldType, GoldDefinition> = {
     type: 'GUMUS_GRAM',
     name: 'Gümüş Gram (Has Gümüş)',
     shortName: 'Gümüş (Gram)',
+    displayName: 'Gümüş',
+    detail: 'Has gümüş · gram',
     weightGrams: 1.0,
     karat: 24,
     purity: 1.0,
@@ -163,4 +183,21 @@ export function calculateGoldUnitPrice(
 
 export function getGoldDisplayDetails(goldType: GoldType) {
   return TURKISH_GOLD_DEFINITIONS[goldType] || TURKISH_GOLD_DEFINITIONS.GRAM_24;
+}
+
+/**
+ * Title and subtitle for lists. Gold and silver are stored with their type
+ * code as symbol (GRAM_24, ATA_CUMHURIYET); show a readable name instead, and
+ * the user's own name underneath when they renamed it.
+ */
+export function getAssetDisplay(asset: Pick<PortfolioAsset, 'category' | 'goldType' | 'symbol' | 'name'>): {
+  title: string;
+  subtitle: string;
+} {
+  if (asset.category === 'COMMODITY' && asset.goldType) {
+    const def = getGoldDisplayDetails(asset.goldType);
+    const renamed = asset.name.trim() && asset.name !== def.name;
+    return { title: def.displayName, subtitle: renamed ? asset.name : def.detail };
+  }
+  return { title: asset.symbol, subtitle: asset.name };
 }
