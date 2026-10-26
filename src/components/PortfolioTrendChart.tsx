@@ -3,19 +3,41 @@ import { TimeRange, Currency } from '../types/portfolio';
 import { formatCurrency, formatPercent } from '../utils/portfolioCalculations';
 import { TrendPoint } from '../utils/snapshots';
 
-const NARROW_QUERY = '(max-width: 639px)';
-
-// Phones get a narrower drawing area so the chart keeps a usable height
-const useIsNarrow = () => {
-  const [narrow, setNarrow] = useState(() => window.matchMedia(NARROW_QUERY).matches);
+// Draws in real pixels at the container's width, so the chart fills it and
+// labels keep their size instead of scaling with a fixed viewBox
+const useElementWidth = () => {
+  // A callback ref, since the canvas mounts only once there is enough data
+  const [el, setEl] = useState<HTMLDivElement | null>(null);
+  const [width, setWidth] = useState(0);
   useEffect(() => {
-    const mq = window.matchMedia(NARROW_QUERY);
-    const onChange = () => setNarrow(mq.matches);
-    mq.addEventListener('change', onChange);
-    return () => mq.removeEventListener('change', onChange);
-  }, []);
-  return narrow;
+    if (!el) return;
+    const observer = new ResizeObserver(([entry]) => setWidth(Math.round(entry.contentRect.width)));
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [el]);
+  return [setEl, width] as const;
 };
+
+/** About `count` round tick values covering min..max. */
+function niceTicks(min: number, max: number, count: number): number[] {
+  const span = max - min || Math.abs(max) || 1;
+  const raw = span / count;
+  const magnitude = 10 ** Math.floor(Math.log10(raw));
+  const step = [1, 2, 2.5, 5, 10].map((m) => m * magnitude).find((m) => m >= raw) ?? raw;
+  const ticks: number[] = [];
+  for (let v = Math.ceil(min / step) * step; v <= max + step * 1e-9; v += step) ticks.push(v);
+  return ticks;
+}
+
+/** Short axis label: 1.250.000 → 1,25 Mn, 48.000 → 48 B */
+function compactAmount(value: number, currency: Currency): string {
+  const sym = currency === 'TRY' ? '₺' : '$';
+  const abs = Math.abs(value);
+  const fmt = (n: number, d: number) => n.toLocaleString('tr-TR', { maximumFractionDigits: d });
+  if (abs >= 1e6) return `${sym}${fmt(value / 1e6, 2)} Mn`;
+  if (abs >= 1e3) return `${sym}${fmt(value / 1e3, 1)} B`;
+  return `${sym}${fmt(value, 0)}`;
+}
 
 interface PortfolioTrendChartProps {
   data: TrendPoint[];
@@ -33,7 +55,7 @@ export const PortfolioTrendChart: React.FC<PortfolioTrendChartProps> = ({
   hasAssets,
 }) => {
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
-  const isNarrow = useIsNarrow();
+  const [canvasRef, measuredWidth] = useElementWidth();
 
   const ranges: { key: TimeRange; label: string }[] = [
     { key: '1W', label: '1H' },
@@ -97,26 +119,33 @@ export const PortfolioTrendChart: React.FC<PortfolioTrendChartProps> = ({
     );
   }
 
-  // Coordinates and scale
-  const width = isNarrow ? 420 : 800;
-  const height = 240;
-  const paddingX = isNarrow ? 16 : 40;
-  const paddingY = 30;
+  // Coordinates and scale (pixels)
+  const width = Math.max(measuredWidth, 280);
+  const isNarrow = width < 480;
+  const height = isNarrow ? 220 : 260;
+  const paddingLeft = isNarrow ? 52 : 64;
+  const paddingRight = 12;
+  const paddingTop = 12;
+  const paddingBottom = 28;
 
   const values = data.map((d) => (baseCurrency === 'TRY' ? d.valueTRY : d.valueUSD));
   const costs = data.map((d) => (baseCurrency === 'TRY' ? d.costTRY : d.costUSD));
 
   const allNumbers = [...values, ...costs];
-  const minVal = Math.min(...allNumbers) * 0.96;
-  const maxVal = Math.max(...allNumbers) * 1.04;
+  const dataMin = Math.min(...allNumbers);
+  const dataMax = Math.max(...allNumbers);
+  const pad = (dataMax - dataMin) * 0.08 || dataMax * 0.02 || 1;
+  const yTicks = niceTicks(dataMin - pad, dataMax + pad, 4);
+  const minVal = Math.min(yTicks[0], dataMin - pad);
+  const maxVal = Math.max(yTicks[yTicks.length - 1], dataMax + pad);
   const rangeVal = maxVal - minVal || 1;
 
   const getX = (index: number) => {
-    return paddingX + (index / (data.length - 1)) * (width - 2 * paddingX);
+    return paddingLeft + (index / (data.length - 1)) * (width - paddingLeft - paddingRight);
   };
 
   const getY = (val: number) => {
-    return height - paddingY - ((val - minVal) / rangeVal) * (height - 2 * paddingY);
+    return height - paddingBottom - ((val - minVal) / rangeVal) * (height - paddingTop - paddingBottom);
   };
 
   // Generate smooth cubic bezier SVG path
@@ -153,7 +182,7 @@ export const PortfolioTrendChart: React.FC<PortfolioTrendChartProps> = ({
   const costPath = buildPath(costPoints);
 
   const areaPath = points.length > 0
-    ? `${linePath} L ${points[points.length - 1].x} ${height - paddingY} L ${points[0].x} ${height - paddingY} Z`
+    ? `${linePath} L ${points[points.length - 1].x} ${height - paddingBottom} L ${points[0].x} ${height - paddingBottom} Z`
     : '';
 
   const activePoint = hoverIndex !== null ? data[hoverIndex] : data[data.length - 1];
@@ -220,10 +249,12 @@ export const PortfolioTrendChart: React.FC<PortfolioTrendChartProps> = ({
       </div>
 
       {/* SVG Interactive Canvas */}
-      <div className="relative w-full overflow-hidden">
+      <div ref={canvasRef} className="relative w-full overflow-hidden">
         <svg
+          width={width}
+          height={height}
           viewBox={`0 0 ${width} ${height}`}
-          className="w-full h-56 sm:h-64 cursor-crosshair select-none"
+          className="block cursor-crosshair select-none touch-pan-y"
           onMouseLeave={() => setHoverIndex(null)}
           onPointerDown={handlePointer}
           onPointerMove={handlePointer}
@@ -235,23 +266,23 @@ export const PortfolioTrendChart: React.FC<PortfolioTrendChartProps> = ({
             </linearGradient>
           </defs>
 
-          {/* Grid Lines */}
-          <line
-            x1={paddingX}
-            y1={getY(maxVal)}
-            x2={width - paddingX}
-            y2={getY(maxVal)}
-            stroke="#1e293b"
-            strokeDasharray="4 4"
-          />
-          <line
-            x1={paddingX}
-            y1={getY(minVal)}
-            x2={width - paddingX}
-            y2={getY(minVal)}
-            stroke="#1e293b"
-            strokeDasharray="4 4"
-          />
+          {/* Horizontal grid with value labels */}
+          {yTicks.map((tick) => (
+            <g key={tick}>
+              <line x1={paddingLeft} y1={getY(tick)} x2={width - paddingRight} y2={getY(tick)} stroke="#1e293b" />
+              <text
+                x={paddingLeft - 8}
+                y={getY(tick)}
+                textAnchor="end"
+                dominantBaseline="middle"
+                fill="#64748b"
+                fontSize="11"
+                fontFamily="Inter, system-ui, sans-serif"
+              >
+                {compactAmount(tick, baseCurrency)}
+              </text>
+            </g>
+          ))}
 
           {/* Area Fill */}
           <path d={areaPath} fill="url(#trendGradient)" />
@@ -280,9 +311,9 @@ export const PortfolioTrendChart: React.FC<PortfolioTrendChartProps> = ({
             <g>
               <line
                 x1={getX(hoverIndex)}
-                y1={paddingY}
+                y1={paddingTop}
                 x2={getX(hoverIndex)}
-                y2={height - paddingY}
+                y2={height - paddingBottom}
                 stroke="#818cf8"
                 strokeWidth="1.5"
                 strokeDasharray="3 3"
@@ -300,7 +331,7 @@ export const PortfolioTrendChart: React.FC<PortfolioTrendChartProps> = ({
 
           {/* X Axis Labels */}
           {data.map((d, i) => {
-            const step = Math.ceil(data.length / (isNarrow ? 4 : 6));
+            const step = Math.ceil(data.length / Math.max(3, Math.floor(width / 110)));
             const last = data.length - 1;
             // Skip a regular label that would collide with the final "today" label
             if (i === last || (i % step === 0 && last - i >= step / 2)) {

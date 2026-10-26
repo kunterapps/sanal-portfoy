@@ -11,6 +11,12 @@ export interface SnapshotTotals {
   realizedProfitUSD?: number;
 }
 
+/** Unit price of each held asset, keyed by asset id */
+export interface UnitPrices {
+  TRY: Record<string, number>;
+  USD: Record<string, number>;
+}
+
 export interface DailyChange {
   changeTRY: number;
   changeUSD: number;
@@ -51,7 +57,8 @@ export function localDayKey(d: Date): string {
 export function upsertTodaySnapshot(
   snapshots: PortfolioSnapshot[],
   totals: SnapshotTotals,
-  now: Date = new Date()
+  now: Date = new Date(),
+  unitPrices?: UnitPrices
 ): PortfolioSnapshot[] {
   const today = localDayKey(now);
   const snapshot: PortfolioSnapshot = {
@@ -63,6 +70,7 @@ export function upsertTodaySnapshot(
     totalCostUSD: totals.totalCostUSD,
     realizedProfitTRY: totals.realizedProfitTRY ?? 0,
     realizedProfitUSD: totals.realizedProfitUSD ?? 0,
+    ...(unitPrices && { unitPricesTRY: unitPrices.TRY, unitPricesUSD: unitPrices.USD }),
   };
   const others = snapshots.filter((s) => s.date !== today);
   return [...others, snapshot].sort((a, b) => a.date.localeCompare(b.date)).slice(-MAX_SNAPSHOTS);
@@ -100,6 +108,38 @@ export function calculateDailyChange(
   const percent = previous.totalValueTRY > 0 ? (changeTRY / previous.totalValueTRY) * 100 : 0;
 
   return { changeTRY, changeUSD, percent, sinceDate: previous.date };
+}
+
+/**
+ * Price change of each asset since the most recent earlier day that recorded
+ * its price, as a fraction (0.012 = +1.2%) in the given currency. Uses unit
+ * prices, so buying or selling doesn't count as a change. Assets with no
+ * earlier price are left out.
+ */
+export function calculateAssetDayChanges(
+  snapshots: PortfolioSnapshot[],
+  current: UnitPrices,
+  currency: 'TRY' | 'USD',
+  now: Date = new Date()
+): Record<string, number> {
+  const today = localDayKey(now);
+  const prices = current[currency];
+  const result: Record<string, number> = {};
+  const pending = new Set(Object.keys(prices));
+  for (let i = snapshots.length - 1; i >= 0 && pending.size > 0; i--) {
+    const s = snapshots[i];
+    if (s.date >= today) continue;
+    const past = currency === 'TRY' ? s.unitPricesTRY : s.unitPricesUSD;
+    if (!past) continue;
+    for (const id of [...pending]) {
+      const before = past[id];
+      if (before > 0) {
+        result[id] = prices[id] / before - 1;
+        pending.delete(id);
+      }
+    }
+  }
+  return result;
 }
 
 /** Chart series from recorded snapshots in the range, ending with today's live value. */
@@ -142,6 +182,15 @@ export function buildTrendSeries(
   return points;
 }
 
+function isPriceMap(v: unknown): v is Record<string, number> {
+  return (
+    !!v &&
+    typeof v === 'object' &&
+    !Array.isArray(v) &&
+    Object.values(v).every((n) => typeof n === 'number' && Number.isFinite(n))
+  );
+}
+
 /** Keeps only well-formed snapshots (used when loading storage or a backup). */
 export function sanitizeSnapshots(value: unknown): PortfolioSnapshot[] {
   if (!Array.isArray(value)) return [];
@@ -168,6 +217,8 @@ export function sanitizeSnapshots(value: unknown): PortfolioSnapshot[] {
       totalCostUSD: s.totalCostUSD,
       ...(isNum(s.realizedProfitTRY) && { realizedProfitTRY: s.realizedProfitTRY }),
       ...(isNum(s.realizedProfitUSD) && { realizedProfitUSD: s.realizedProfitUSD }),
+      ...(isPriceMap(s.unitPricesTRY) && { unitPricesTRY: s.unitPricesTRY }),
+      ...(isPriceMap(s.unitPricesUSD) && { unitPricesUSD: s.unitPricesUSD }),
     }))
     .sort((a, b) => a.date.localeCompare(b.date))
     .slice(-MAX_SNAPSHOTS);

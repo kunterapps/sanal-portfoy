@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildTrendSeries,
+  calculateAssetDayChanges,
   calculateDailyChange,
   localDayKey,
   sanitizeSnapshots,
@@ -92,5 +93,38 @@ describe('calculateDailyChange with sales', () => {
     // Today: sold 5 at 150 → 250 realized, remaining 5 units worth 750, cost 500
     const change = calculateDailyChange([yesterday], { ...totals(750, 500), realizedProfitTRY: 250, realizedProfitUSD: 6.25 }, NOW);
     expect(change?.changeTRY).toBe(0);
+  });
+});
+
+describe('calculateAssetDayChanges', () => {
+  const withPrices = (date: string, prices: Record<string, number>): PortfolioSnapshot => ({
+    ...snap(date, 100, 90),
+    unitPricesTRY: prices,
+    unitPricesUSD: Object.fromEntries(Object.entries(prices).map(([k, v]) => [k, v / 40])),
+  });
+
+  it('compares each asset with the latest earlier day that has its price', () => {
+    const snapshots = [
+      withPrices('2026-10-21', { a: 100, b: 50 }),
+      withPrices('2026-10-23', { a: 110 }),
+      withPrices('2026-10-24', { a: 999, b: 999 }), // today: ignored
+    ];
+    const changes = calculateAssetDayChanges(snapshots, { TRY: { a: 121, b: 40, c: 5 }, USD: {} }, 'TRY', NOW);
+    expect(changes.a).toBeCloseTo(0.1);
+    expect(changes.b).toBeCloseTo(-0.2);
+    expect(changes.c).toBeUndefined();
+  });
+
+  it('ignores snapshots recorded before prices were stored', () => {
+    expect(calculateAssetDayChanges([snap('2026-10-23', 100, 90)], { TRY: { a: 1 }, USD: { a: 1 } }, 'USD', NOW)).toEqual({});
+  });
+
+  it('stores unit prices with today and keeps them through sanitizing', () => {
+    const list = upsertTodaySnapshot([], totals(100, 90), NOW, { TRY: { a: 40 }, USD: { a: 1 } });
+    expect(sanitizeSnapshots(JSON.parse(JSON.stringify(list)))[0]).toMatchObject({
+      unitPricesTRY: { a: 40 },
+      unitPricesUSD: { a: 1 },
+    });
+    expect(sanitizeSnapshots([{ ...list[0], unitPricesTRY: { a: 'x' } }])[0].unitPricesTRY).toBeUndefined();
   });
 });

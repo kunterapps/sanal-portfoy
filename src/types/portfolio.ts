@@ -90,6 +90,9 @@ export interface PortfolioSnapshot {
   /** Cumulative realized P/L at snapshot time (absent in older snapshots) */
   realizedProfitTRY?: number;
   realizedProfitUSD?: number;
+  /** Unit price of each held asset that day, keyed by asset id (absent in older snapshots) */
+  unitPricesTRY?: Record<string, number>;
+  unitPricesUSD?: Record<string, number>;
 }
 
 export interface CategorySummary {
