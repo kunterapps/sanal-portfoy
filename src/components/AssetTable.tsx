@@ -21,7 +21,7 @@ import {
   CATEGORY_METADATA,
   CURRENCY_METADATA,
 } from '../utils/portfolioCalculations';
-import { getGoldDisplayDetails } from '../utils/goldCalculations';
+import { getAssetDisplay, getGoldDisplayDetails } from '../utils/goldCalculations';
 import { isClosedPosition } from '../utils/transactions';
 
 interface AssetTableProps {
@@ -150,6 +150,7 @@ export const AssetTable: React.FC<AssetTableProps> = ({
         displayProfit: isTRY ? pl.profitTRY : pl.profitUSD,
         portfolioSharePercent: totalValueTRY > 0 ? (pl.valueTRY / totalValueTRY) * 100 : 0,
         dayChange: dayChanges[asset.id] as number | undefined,
+        display: getAssetDisplay(asset),
       };
     });
   }, [assets, rates, baseCurrency, dayChanges]);
@@ -165,12 +166,14 @@ export const AssetTable: React.FC<AssetTableProps> = ({
         return (
           asset.symbol.toLowerCase().includes(q) ||
           asset.name.toLowerCase().includes(q) ||
+          asset.display.title.toLowerCase().includes(q) ||
+          asset.display.subtitle.toLowerCase().includes(q) ||
           (CATEGORY_METADATA[asset.category]?.label || '').toLowerCase().includes(q)
         );
       })
       .sort((a, b) => {
         let diff = 0;
-        if (sortField === 'symbol') diff = a.symbol.localeCompare(b.symbol);
+        if (sortField === 'symbol') diff = a.display.title.localeCompare(b.display.title, 'tr');
         else if (sortField === 'value') diff = a.displayValue - b.displayValue;
         else if (sortField === 'share') diff = a.portfolioSharePercent - b.portfolioSharePercent;
         else if (sortField === 'profit') diff = a.pl.profitPercent - b.pl.profitPercent;
@@ -240,21 +243,10 @@ export const AssetTable: React.FC<AssetTableProps> = ({
     return gold && !gold.isUnitPiece ? 'gr' : 'ad.';
   };
 
-  const badges = (asset: PortfolioAsset) => {
-    const gold = asset.category === 'COMMODITY' && asset.goldType ? getGoldDisplayDetails(asset.goldType) : null;
-    return (
-      <>
-        {isClosedPosition(asset) && (
-          <span className="text-xs px-1.5 rounded bg-slate-800 text-slate-300 border border-slate-700">Kapandı</span>
-        )}
-        {gold && (
-          <span className="text-xs px-1.5 rounded bg-amber-950/40 text-amber-300 border border-amber-900/40">
-            {gold.shortName}
-          </span>
-        )}
-      </>
+  const badges = (asset: PortfolioAsset) =>
+    isClosedPosition(asset) && (
+      <span className="text-xs px-1.5 rounded bg-slate-800 text-slate-300 border border-slate-700">Kapandı</span>
     );
-  };
 
   const SortHeader: React.FC<{ field: SortField; children: React.ReactNode; align?: 'left' | 'right' }> = ({
     field,
@@ -405,10 +397,10 @@ export const AssetTable: React.FC<AssetTableProps> = ({
                           />
                           <div className="min-w-0">
                             <div className="flex flex-wrap items-center gap-1.5">
-                              <span className="font-semibold text-slate-100">{asset.symbol}</span>
+                              <span className="font-semibold text-slate-100">{asset.display.title}</span>
                               {badges(asset)}
                             </div>
-                            <div className="text-xs text-slate-400 truncate mt-0.5">{asset.name}</div>
+                            <div className="text-xs text-slate-400 truncate mt-0.5">{asset.display.subtitle}</div>
                           </div>
                         </div>
                         <div className="text-right tabular-nums shrink-0">
@@ -580,11 +572,11 @@ export const AssetTable: React.FC<AssetTableProps> = ({
                               />
                               <div className="min-w-0">
                                 <div className="flex items-center gap-1.5">
-                                  <span className="font-semibold text-slate-100">{asset.symbol}</span>
+                                  <span className="font-semibold text-slate-100">{asset.display.title}</span>
                                   {badges(asset)}
                                 </div>
-                                <div className="text-xs text-slate-500 truncate max-w-[13rem]" title={asset.name}>
-                                  {asset.name}
+                                <div className="text-xs text-slate-500 truncate max-w-[13rem]" title={asset.display.subtitle}>
+                                  {asset.display.subtitle}
                                 </div>
                               </div>
                             </div>

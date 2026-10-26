@@ -5,6 +5,7 @@ import { formatCurrency, formatNumber } from '../utils/portfolioCalculations';
 import { crossRate } from '../utils/currency';
 import { localDayKey } from '../utils/snapshots';
 import { computePosition, createTransaction, sortTransactions, TransactionError } from '../utils/transactions';
+import { getAssetDisplay } from '../utils/goldCalculations';
 
 interface TransactionModalProps {
   asset: PortfolioAsset | null;
@@ -98,8 +99,8 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
         <div className="flex items-center justify-between border-b border-slate-800 pb-4">
           <div>
             <h3 className="text-base font-bold text-white tracking-tight">Alış / Satış İşlemleri</h3>
-            <span className="text-xs text-indigo-400 tabular-nums font-semibold">{asset.symbol}</span>
-            <span className="text-xs text-slate-400 ml-1">· {asset.name}</span>
+            <span className="text-xs text-indigo-400 tabular-nums font-semibold">{getAssetDisplay(asset).title}</span>
+            <span className="text-xs text-slate-400 ml-1">· {getAssetDisplay(asset).subtitle}</span>
           </div>
           <button
             onClick={onClose}

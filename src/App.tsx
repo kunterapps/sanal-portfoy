@@ -41,6 +41,7 @@ import {
   upsertTodaySnapshot,
 } from './utils/snapshots';
 import { getCashUnitPrice } from './utils/currency';
+import { getAssetDisplay } from './utils/goldCalculations';
 import { applyTransactions, ensureTransactions, TransactionError } from './utils/transactions';
 import { TransactionModal } from './components/TransactionModal';
 
@@ -251,14 +252,14 @@ export default function App() {
           ]);
         })
       );
-      showToast(`${assetData.symbol} başarıyla güncellendi.`);
+      showToast(`${getAssetDisplay(assetData).title} başarıyla güncellendi.`);
     } else {
       const newAsset: PortfolioAsset = ensureTransactions({
         ...assetData,
         id: `asset_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
       });
       setAssets((prev) => [newAsset, ...prev]);
-      showToast(`${assetData.symbol} portföye eklendi.`);
+      showToast(`${getAssetDisplay(assetData).title} portföye eklendi.`);
     }
     setEditingAsset(null);
   };
@@ -268,9 +269,10 @@ export default function App() {
     const asset = assets.find((a) => a.id === id);
     if (!asset) return;
 
-    if (window.confirm(`"${asset.symbol} - ${asset.name}" varlığını portföyden silmek istediğinize emin misiniz?`)) {
+    const { title, subtitle } = getAssetDisplay(asset);
+    if (window.confirm(`"${title} - ${subtitle}" varlığını portföyden silmek istediğinize emin misiniz?`)) {
       setAssets((prev) => prev.filter((a) => a.id !== id));
-      showToast(`${asset.symbol} portföyden kaldırıldı.`);
+      showToast(`${title} portföyden kaldırıldı.`);
     }
   };
 

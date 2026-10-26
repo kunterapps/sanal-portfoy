@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { X, Check } from 'lucide-react';
 import { PortfolioAsset } from '../types/portfolio';
 import { formatCurrency } from '../utils/portfolioCalculations';
+import { getAssetDisplay } from '../utils/goldCalculations';
 
 interface QuickPriceModalProps {
   asset: PortfolioAsset | null;
@@ -40,8 +41,8 @@ export const QuickPriceModal: React.FC<QuickPriceModalProps> = ({
         <div className="flex items-center justify-between border-b border-slate-800 pb-3">
           <div>
             <h3 className="text-sm font-bold text-white tracking-tight">Fiyatı Elle Güncelle</h3>
-            <span className="text-xs text-indigo-400 tabular-nums font-semibold">{asset.symbol}</span>
-            <span className="text-xs text-slate-400 ml-1">· {asset.name}</span>
+            <span className="text-xs text-indigo-400 tabular-nums font-semibold">{getAssetDisplay(asset).title}</span>
+            <span className="text-xs text-slate-400 ml-1">· {getAssetDisplay(asset).subtitle}</span>
           </div>
           <button
             onClick={onClose}
