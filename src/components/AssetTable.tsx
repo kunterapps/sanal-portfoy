@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import {
   Search,
   ArrowUpDown,
@@ -111,6 +111,38 @@ export const AssetTable: React.FC<AssetTableProps> = ({
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
   const [groupMode, setGroupModeState] = useState<GroupMode>(loadGroupMode);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+
+  // The toolbar sticks under the navbar and the column headers stick under the toolbar, so track its height
+  const toolbarRef = useRef<HTMLDivElement>(null);
+  const [toolbarHeight, setToolbarHeight] = useState(0);
+  useEffect(() => {
+    const el = toolbarRef.current;
+    if (!el) return;
+    const measure = () => setToolbarHeight(el.offsetHeight);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  // Sticky column headers need the table out of its horizontal scroll box, so only do it while the table fits
+  const tableWrapRef = useRef<HTMLDivElement>(null);
+  const tableRef = useRef<HTMLTableElement>(null);
+  const [tableFits, setTableFits] = useState(true);
+  useEffect(() => {
+    const wrap = tableWrapRef.current;
+    const table = tableRef.current;
+    if (!wrap || !table) return;
+    const check = () => setTableFits(table.offsetWidth <= wrap.clientWidth);
+    check();
+    const observer = new ResizeObserver(check);
+    observer.observe(wrap);
+    observer.observe(table);
+    return () => observer.disconnect();
+  }, []);
+
+  const headerCellStyle = tableFits ? { top: `calc(var(--nav-h, 0px) + ${toolbarHeight}px)` } : undefined;
+  const headerCellClass = `${tableFits ? 'sticky z-10' : 'relative'} bg-[#0f172a] shadow-[inset_0_-1px_0_#1e293b]`;
 
   const setGroupMode = (mode: GroupMode) => {
     setGroupModeState(mode);
@@ -255,7 +287,8 @@ export const AssetTable: React.FC<AssetTableProps> = ({
   }) => (
     <th
       onClick={() => handleSort(field)}
-      className={`py-2.5 px-3 cursor-pointer hover:text-white transition-colors select-none ${
+      style={headerCellStyle}
+      className={`${headerCellClass} py-2.5 px-3 cursor-pointer hover:text-white transition-colors select-none ${
         align === 'right' ? 'text-right' : 'text-left'
       } ${sortField === field ? 'text-slate-200' : ''}`}
     >
@@ -274,9 +307,12 @@ export const AssetTable: React.FC<AssetTableProps> = ({
     'w-7 h-7 inline-flex items-center justify-center rounded-md text-slate-400 hover:text-white hover:bg-slate-700/70 focus-visible:text-white focus-visible:bg-slate-700/70 transition-colors';
 
   return (
-    <section className="bg-[#0f172a] border border-slate-800 rounded-2xl overflow-hidden">
-      {/* Toolbar: category filter, search, grouping */}
-      <div className="p-3 sm:p-4 border-b border-slate-800 space-y-3">
+    <section className="bg-[#0f172a] border border-slate-800 rounded-2xl overflow-clip">
+      {/* Toolbar: category filter, search, grouping; stays under the navbar from md up */}
+      <div
+        ref={toolbarRef}
+        className="md:sticky md:top-[var(--nav-h,0px)] md:z-20 bg-[#0f172a] p-3 sm:p-4 border-b border-slate-800 space-y-3"
+      >
         <div className="flex flex-col-reverse xl:flex-row xl:items-center justify-between gap-3">
           <div className="no-scrollbar -mx-3 px-3 sm:mx-0 sm:px-0 flex items-center gap-1.5 overflow-x-auto sm:flex-wrap sm:overflow-visible">
             {TABS.map((tab) => {
@@ -494,19 +530,21 @@ export const AssetTable: React.FC<AssetTableProps> = ({
       </ul>
 
       {/* Table from md up */}
-      <div className="hidden md:block overflow-x-auto">
-        <table className="w-full text-left text-sm">
-          <thead className="text-slate-500 text-xs font-semibold uppercase tracking-wide whitespace-nowrap border-b border-slate-800">
+      <div ref={tableWrapRef} className={`hidden md:block ${tableFits ? '' : 'overflow-x-auto'}`}>
+        <table ref={tableRef} className="w-full text-left text-sm">
+          <thead className="text-slate-500 text-xs font-semibold uppercase tracking-wide whitespace-nowrap">
             <tr>
               <SortHeader field="symbol" align="left">Varlık</SortHeader>
               <SortHeader field="quantity">Miktar</SortHeader>
-              <th className="py-2.5 px-3 text-right hidden 2xl:table-cell">Ort. Maliyet</th>
+              <th style={headerCellStyle} className={`${headerCellClass} py-2.5 px-3 text-right hidden 2xl:table-cell`}>
+                Ort. Maliyet
+              </th>
               <SortHeader field="price">Fiyat</SortHeader>
               <SortHeader field="day">Gün</SortHeader>
               <SortHeader field="value">Değer</SortHeader>
               <SortHeader field="share">Pay</SortHeader>
               <SortHeader field="profit">K/Z</SortHeader>
-              <th className="py-2.5 px-3 w-[7.5rem]">
+              <th style={headerCellStyle} className={`${headerCellClass} py-2.5 pl-1 pr-2`}>
                 <span className="sr-only">İşlemler</span>
               </th>
             </tr>
@@ -575,7 +613,7 @@ export const AssetTable: React.FC<AssetTableProps> = ({
                                   <span className="font-semibold text-slate-100">{asset.display.title}</span>
                                   {badges(asset)}
                                 </div>
-                                <div className="text-xs text-slate-500 truncate max-w-[13rem]" title={asset.display.subtitle}>
+                                <div className="text-xs text-slate-500 truncate max-w-[8rem] 2xl:max-w-[13rem]" title={asset.display.subtitle}>
                                   {asset.display.subtitle}
                                 </div>
                               </div>
@@ -650,7 +688,7 @@ export const AssetTable: React.FC<AssetTableProps> = ({
                           </td>
 
                           {/* With a mouse, actions show on hover or keyboard focus to keep rows quiet; touch screens always show them */}
-                          <td className="py-2.5 px-3">
+                          <td className="py-2.5 pl-1 pr-2">
                             <div className="flex items-center justify-end gap-0.5 [@media(hover:hover)]:opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
                               <button onClick={() => onOpenTransactions(asset)} title="Alış / Satış" className={`${iconButton} hover:text-emerald-300`}>
                                 <ArrowLeftRight className="w-4 h-4" />
