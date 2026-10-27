@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { Plus, TrendingUp, RefreshCw, Download } from 'lucide-react';
 import { ExchangeRates } from '../types/portfolio';
 import { calculateGoldUnitPrice } from '../utils/goldCalculations';
@@ -20,9 +20,21 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenExportModal,
 }) => {
   const ceyrekPrice = calculateGoldUnitPrice('CEYREK', rates.GRAM_GOLD_TRY, rates.SILVER_GRAM_TRY, rates);
+  const headerRef = useRef<HTMLElement>(null);
+
+  // Publish the header height (it grows by the rate strip below xl) so sticky content can sit right under it
+  useEffect(() => {
+    const el = headerRef.current;
+    if (!el) return;
+    const publish = () => document.documentElement.style.setProperty('--nav-h', `${el.offsetHeight}px`);
+    publish();
+    const observer = new ResizeObserver(publish);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
 
   return (
-    <header className="sticky top-0 z-40 w-full border-b border-slate-800 bg-[#090d16]/90 backdrop-blur-md transition-all">
+    <header ref={headerRef} className="sticky top-0 z-40 w-full border-b border-slate-800 bg-[#090d16]/90 backdrop-blur-md transition-all">
       <div className="max-w-[1600px] mx-auto flex items-center justify-between gap-3 sm:gap-6 px-4 sm:px-6 lg:px-8 h-14 sm:h-16">
         {/* Zone 1: Brand Wordmark */}
         <div className="flex items-center gap-3 shrink-0">
