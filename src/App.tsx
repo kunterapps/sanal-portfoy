@@ -451,10 +451,10 @@ export default function App() {
           </div>
         </main>
       ) : (
-        <div className="flex-1 w-full max-w-[1600px] mx-auto xl:grid xl:grid-cols-[20rem_minmax(0,1fr)]">
+        <div className="flex-1 w-full max-w-[1600px] mx-auto xl:grid xl:grid-cols-[22rem_minmax(0,1fr)]">
           {/* Left panel from xl up (stacked above the table below that): summary always, allocation only when wide */}
           <aside className="xl:border-r border-slate-800 bg-[#0b111e] xl:bg-transparent">
-            <div className="xl:sticky xl:top-16 xl:max-h-[calc(100vh-4rem)] xl:overflow-y-auto no-scrollbar px-4 sm:px-6 lg:px-8 xl:px-6 py-5 space-y-6">
+            <div className="xl:sticky xl:top-[var(--nav-h,4rem)] xl:max-h-[calc(100vh-var(--nav-h,4rem))] xl:overflow-y-auto no-scrollbar px-4 sm:px-6 lg:px-8 xl:px-6 py-5 space-y-6">
               <SummaryPanel
                 totals={totals}
                 dailyChange={dailyChange}
