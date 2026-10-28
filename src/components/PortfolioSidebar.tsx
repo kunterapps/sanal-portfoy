@@ -201,9 +201,11 @@ export const AllocationPanel: React.FC<AllocationPanelProps> = ({
   const [active, setActive] = useState<string | null>(null);
   const total = categorySummaries.reduce((sum, c) => sum + c.valueTRY, 0);
 
-  const size = 112;
+  const size = 128;
   const stroke = 16;
-  const radius = (size - stroke) / 2;
+  const activeGrow = 6;
+  // Leave room inside the SVG for the hovered slice's thicker stroke, otherwise its outer edge gets clipped
+  const radius = (size - stroke - activeGrow) / 2;
   const circumference = 2 * Math.PI * radius;
   let offset = 0;
   const slices = categorySummaries
@@ -236,7 +238,7 @@ export const AllocationPanel: React.FC<AllocationPanelProps> = ({
                     r={radius}
                     fill="none"
                     stroke={s.color}
-                    strokeWidth={active === s.category ? stroke + 4 : stroke}
+                    strokeWidth={active === s.category ? stroke + activeGrow : stroke}
                     strokeDasharray={`${Math.max(0, s.dash - 1.5)} ${circumference}`}
                     strokeDashoffset={-s.offset}
                     className="transition-all duration-200"
