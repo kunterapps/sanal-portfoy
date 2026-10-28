@@ -214,7 +214,7 @@ export function fetchFundQuote(code: string, kind: 'YAT' | 'EMK'): Promise<Serve
 export interface MarketIndex {
   key: string;
   label: string;
-  /** Unit shown before the value ('$' for Brent and Bitcoin, empty for index points) */
+  /** Unit shown before the value ('$' for oil and Bitcoin, empty for index points) */
   unit: string;
   price: number;
   /** Change since the previous close, in percent (24 h rolling for Bitcoin) */
@@ -228,7 +228,8 @@ export const MARKET_INDICES: { key: string; label: string; unit: string; yahoo: 
   { key: 'XU030', label: 'BIST 30', unit: '', yahoo: 'XU030.IS' },
   { key: 'SPX', label: 'S&P 500', unit: '', yahoo: '^GSPC' },
   { key: 'NDX', label: 'Nasdaq', unit: '', yahoo: '^IXIC' },
-  { key: 'BRENT', label: 'Brent', unit: '$', yahoo: 'BZ=F' },
+  // WTI: Yahoo has no ICE Brent, only a thin NYMEX copy that can sit dollars off
+  { key: 'WTI', label: 'Petrol', unit: '$', yahoo: 'CL=F' },
   { key: 'BTC', label: 'Bitcoin', unit: '$', yahoo: 'BTC-USD', binance: 'BTCUSDT' },
 ];
 
