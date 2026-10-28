@@ -228,8 +228,8 @@ export const MARKET_INDICES: { key: string; label: string; unit: string; yahoo: 
   { key: 'XU030', label: 'BIST 30', unit: '', yahoo: 'XU030.IS' },
   { key: 'SPX', label: 'S&P 500', unit: '', yahoo: '^GSPC' },
   { key: 'NDX', label: 'Nasdaq', unit: '', yahoo: '^IXIC' },
-  // WTI: Yahoo has no ICE Brent, only a thin NYMEX copy that can sit dollars off
-  { key: 'WTI', label: 'Petrol', unit: '$', yahoo: 'CL=F' },
+  // Yahoo's Brent is NYMEX's thin copy of ICE Brent, so it can sit a few dollars off other sites
+  { key: 'BRENT', label: 'Petrol', unit: '$', yahoo: 'BZ=F' },
   { key: 'BTC', label: 'Bitcoin', unit: '$', yahoo: 'BTC-USD', binance: 'BTCUSDT' },
 ];
 
