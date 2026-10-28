@@ -23,6 +23,21 @@ describe('parseYahooChart', () => {
     });
   });
 
+  it("prefers Yahoo's own previous close over the bars", () => {
+    const q = parseYahooChart({
+      chart: {
+        result: [
+          {
+            meta: { regularMarketPrice: 111.1, previousClose: 109.7, chartPreviousClose: 109.5 },
+            timestamp: [1_761_523_200, 1_761_609_600],
+            indicators: { quote: [{ close: [113.88, 111.1] }] },
+          },
+        ],
+      },
+    });
+    expect(q?.previousClose).toBe(109.7);
+  });
+
   it('reads the previous close from daily bars', () => {
     const day = 86_400;
     const t0 = 1_761_609_600; // 2026-10-28 00:00 UTC

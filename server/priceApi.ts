@@ -45,6 +45,8 @@ export function parseYahooChart(data: unknown): Quote | null {
           regularMarketPrice?: number;
           currency?: string;
           regularMarketTime?: number;
+          previousClose?: number;
+          chartPreviousClose?: number;
           longName?: string;
           shortName?: string;
         };
@@ -63,7 +65,13 @@ export function parseYahooChart(data: unknown): Quote | null {
 
   let currency = (result.meta?.currency || '').trim();
   const time = result.meta?.regularMarketTime;
-  let previousClose = findPreviousClose(result.timestamp, result.indicators?.quote?.[0]?.close, time);
+  // Yahoo's own previous close (what its pages show the daily change against)
+  // survives a futures roll, unlike the bars, which mix the old and new month.
+  // With range=1d both meta fields hold the previous session's close.
+  const metaPrevious = [result.meta?.previousClose, result.meta?.chartPreviousClose].find(
+    (v): v is number => typeof v === 'number' && v > 0
+  );
+  let previousClose = metaPrevious ?? findPreviousClose(result.timestamp, result.indicators?.quote?.[0]?.close, time);
   // London listings are quoted in pence
   if (currency === 'GBp' || currency === 'GBX') {
     price = price / 100;
@@ -277,7 +285,7 @@ export function createPriceService(fetchFn: FetchFn = fetch, now: () => number =
         try {
           const res = await fetchWithTimeout(
             fetchFn,
-            `https://${host}.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(sym)}?interval=1d&range=5d`,
+            `https://${host}.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(sym)}?interval=1d&range=1d`,
             { headers: { 'User-Agent': USER_AGENT, Accept: 'application/json' } }
           );
           if (!res.ok) continue;
