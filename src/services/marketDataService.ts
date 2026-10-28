@@ -178,6 +178,7 @@ export interface ServerQuote {
   source: string;
   asOf: string;
   name?: string;
+  previousClose?: number;
 }
 
 // Price API location: same origin in local dev/preview, the Cloudflare Worker
@@ -208,6 +209,78 @@ export function fetchStockQuote(symbol: string): Promise<ServerQuote | null> {
 
 export function fetchFundQuote(code: string, kind: 'YAT' | 'EMK'): Promise<ServerQuote | null> {
   return fetchServerQuote(`/api/fund?code=${encodeURIComponent(code.trim().toUpperCase())}&kind=${kind}`);
+}
+
+export interface MarketIndex {
+  key: string;
+  label: string;
+  /** Unit shown before the value ('$' for Brent and Bitcoin, empty for index points) */
+  unit: string;
+  price: number;
+  /** Change since the previous close, in percent (24 h rolling for Bitcoin) */
+  changePct: number | null;
+  asOf: string;
+}
+
+/** Indices and benchmarks shown in the header strip, in display order */
+export const MARKET_INDICES: { key: string; label: string; unit: string; yahoo: string; binance?: string }[] = [
+  { key: 'XU100', label: 'BIST 100', unit: '', yahoo: 'XU100.IS' },
+  { key: 'XU030', label: 'BIST 30', unit: '', yahoo: 'XU030.IS' },
+  { key: 'SPX', label: 'S&P 500', unit: '', yahoo: '^GSPC' },
+  { key: 'NDX', label: 'Nasdaq', unit: '', yahoo: '^IXIC' },
+  { key: 'BRENT', label: 'Brent', unit: '$', yahoo: 'BZ=F' },
+  { key: 'BTC', label: 'Bitcoin', unit: '$', yahoo: 'BTC-USD', binance: 'BTCUSDT' },
+];
+
+function changePct(price: number, previousClose: number | undefined): number | null {
+  return previousClose && previousClose > 0 ? ((price - previousClose) / previousClose) * 100 : null;
+}
+
+async function fetchBinance24h(pair: string): Promise<{ price: number; changePct: number | null } | null> {
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
+    const res = await fetch(`https://api.binance.com/api/v3/ticker/24hr?symbol=${encodeURIComponent(pair)}`, {
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+    if (!res.ok) return null;
+    const data = await res.json();
+    const price = parseFloat(data.lastPrice);
+    const pct = parseFloat(data.priceChangePercent);
+    return price > 0 ? { price, changePct: isNaN(pct) ? null : pct } : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Fetches the header strip's indices: Bitcoin from Binance (Yahoo as
+ * fallback), the rest from Yahoo via the price API. Failed lookups are left out.
+ */
+export async function fetchMarketIndices(): Promise<MarketIndex[]> {
+  const results = await Promise.all(
+    MARKET_INDICES.map(async (def): Promise<MarketIndex | null> => {
+      const base = { key: def.key, label: def.label, unit: def.unit };
+      if (def.binance) {
+        const t = await fetchBinance24h(def.binance);
+        if (t) return { ...base, ...t, asOf: new Date().toISOString() };
+      }
+      const q = await fetchStockQuote(def.yahoo);
+      return q && { ...base, price: q.price, changePct: changePct(q.price, q.previousClose), asOf: q.asOf };
+    })
+  );
+  return results.filter((x): x is MarketIndex => !!x);
+}
+
+/**
+ * Puts fresh index values over the previous ones in display order, so an index
+ * whose lookup failed keeps its last value instead of vanishing from the strip.
+ */
+export function mergeMarketIndices(fresh: MarketIndex[], previous: MarketIndex[]): MarketIndex[] {
+  return MARKET_INDICES.map(
+    (def) => fresh.find((x) => x.key === def.key) ?? previous.find((x) => x.key === def.key)
+  ).filter((x): x is MarketIndex => !!x);
 }
 
 /**

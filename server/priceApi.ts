@@ -15,6 +15,8 @@ export interface Quote {
   asOf: string;
   /** Company or fund name when the source reports one */
   name?: string;
+  /** Close of the session before the latest one (Yahoo only), for daily change */
+  previousClose?: number;
 }
 
 type FetchFn = typeof fetch;
@@ -46,6 +48,7 @@ export function parseYahooChart(data: unknown): Quote | null {
           longName?: string;
           shortName?: string;
         };
+        timestamp?: number[];
         indicators?: { quote?: { close?: (number | null)[] }[] };
       }
     | undefined;
@@ -59,12 +62,14 @@ export function parseYahooChart(data: unknown): Quote | null {
   if (typeof price !== 'number' || !(price > 0)) return null;
 
   let currency = (result.meta?.currency || '').trim();
+  const time = result.meta?.regularMarketTime;
+  let previousClose = findPreviousClose(result.timestamp, result.indicators?.quote?.[0]?.close, time);
   // London listings are quoted in pence
   if (currency === 'GBp' || currency === 'GBX') {
     price = price / 100;
+    if (previousClose) previousClose = previousClose / 100;
     currency = 'GBP';
   }
-  const time = result.meta?.regularMarketTime;
   const name = (result.meta?.longName || result.meta?.shortName || '').trim();
   return {
     price,
@@ -72,7 +77,29 @@ export function parseYahooChart(data: unknown): Quote | null {
     source: 'yahoo',
     asOf: typeof time === 'number' ? new Date(time * 1000).toISOString() : new Date().toISOString(),
     ...(name && { name }),
+    ...(previousClose && { previousClose }),
   };
+}
+
+/**
+ * Daily bars end with the latest session (still open or the last closed one);
+ * the previous close is the bar before it. A bar dated before the latest
+ * market time's day means that day's bar is missing, so it is the previous close.
+ */
+function findPreviousClose(
+  timestamps: number[] | undefined,
+  closes: (number | null)[] | undefined,
+  marketTime: number | undefined
+): number | undefined {
+  if (!timestamps || !closes) return undefined;
+  const bars = timestamps
+    .map((t, i) => ({ t, c: closes[i] }))
+    .filter((b): b is { t: number; c: number } => typeof b.c === 'number' && b.c > 0);
+  if (bars.length === 0) return undefined;
+  const day = (sec: number) => Math.floor(sec / 86400);
+  const last = bars[bars.length - 1];
+  if (typeof marketTime === 'number' && day(last.t) < day(marketTime)) return last.c;
+  return bars.length >= 2 ? bars[bars.length - 2].c : undefined;
 }
 
 /** Parses a TEFAS date: ISO / YYYY-MM-DD, YYYYMMDD, DD.MM.YYYY or epoch ms. */
