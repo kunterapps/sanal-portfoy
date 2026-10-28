@@ -1,19 +1,45 @@
 import React, { useEffect, useRef } from 'react';
 import { Plus, TrendingUp, RefreshCw, Download } from 'lucide-react';
 import { ExchangeRates } from '../types/portfolio';
+import { MarketIndex } from '../services/marketDataService';
 import { calculateGoldUnitPrice } from '../utils/goldCalculations';
 import { formatCurrency } from '../utils/portfolioCalculations';
 
 interface NavbarProps {
   rates: ExchangeRates;
+  indices: MarketIndex[];
   isRefreshing: boolean;
   onRefresh: () => void;
   onOpenAddModal: () => void;
   onOpenExportModal: () => void;
 }
 
+const formatIndexValue = (value: number) =>
+  value.toLocaleString('tr-TR', value >= 1000 ? { maximumFractionDigits: 0 } : { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+const IndexItem: React.FC<{ index: MarketIndex }> = ({ index }) => {
+  const pct = index.changePct;
+  const asOf = new Date(index.asOf).toLocaleString('tr-TR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+  return (
+    <span className="text-slate-500" title={`${index.label}: ${asOf} itibarıyla`}>
+      {index.label}{' '}
+      <span className="text-slate-200 font-semibold">
+        {index.unit}
+        {formatIndexValue(index.price)}
+      </span>
+      {pct !== null && (
+        <span className={`ml-1 font-medium ${pct > 0 ? 'text-emerald-400' : pct < 0 ? 'text-rose-400' : 'text-slate-400'}`}>
+          {pct > 0 ? '▲' : pct < 0 ? '▼' : ''}
+          {Math.abs(pct).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%
+        </span>
+      )}
+    </span>
+  );
+};
+
 export const Navbar: React.FC<NavbarProps> = ({
   rates,
+  indices,
   isRefreshing,
   onRefresh,
   onOpenAddModal,
@@ -98,13 +124,17 @@ export const Navbar: React.FC<NavbarProps> = ({
         </div>
       </div>
 
-      {/* Compact rate strip for screens where the ticker above is hidden */}
-      <div className="xl:hidden border-t border-slate-800/80">
-        <div className="no-scrollbar max-w-[1600px] mx-auto flex items-center gap-4 overflow-x-auto px-4 sm:px-6 h-9 text-xs whitespace-nowrap tabular-nums">
-          <span className="text-slate-500">USD <span className="text-slate-200 font-semibold">₺{rates.USD_TRY.toFixed(2)}</span></span>
-          <span className="text-slate-500">EUR <span className="text-slate-200 font-semibold">₺{rates.EUR_TRY.toFixed(2)}</span></span>
-          <span className="text-slate-500">Gram <span className="text-amber-400 font-semibold">{formatCurrency(rates.GRAM_GOLD_TRY, 'TRY', 0)}</span></span>
-          <span className="text-slate-500">Çeyrek <span className="text-amber-300 font-semibold">{formatCurrency(ceyrekPrice, 'TRY', 0)}</span></span>
+      {/* Second strip: rates (only where the ticker above is hidden) and market indices; scrolls sideways when narrow */}
+      <div className={`border-t border-slate-800/80 ${indices.length === 0 ? 'xl:hidden' : ''}`}>
+        <div className="no-scrollbar max-w-[1600px] mx-auto flex items-center gap-4 overflow-x-auto px-4 sm:px-6 lg:px-8 h-9 text-xs whitespace-nowrap tabular-nums [mask-image:linear-gradient(to_right,black_88%,transparent)] xl:[mask-image:none]">
+          <span className="xl:hidden text-slate-500">USD <span className="text-slate-200 font-semibold">₺{rates.USD_TRY.toFixed(2)}</span></span>
+          <span className="xl:hidden text-slate-500">EUR <span className="text-slate-200 font-semibold">₺{rates.EUR_TRY.toFixed(2)}</span></span>
+          <span className="xl:hidden text-slate-500">Gram <span className="text-amber-400 font-semibold">{formatCurrency(rates.GRAM_GOLD_TRY, 'TRY', 0)}</span></span>
+          <span className="xl:hidden text-slate-500">Çeyrek <span className="text-amber-300 font-semibold">{formatCurrency(ceyrekPrice, 'TRY', 0)}</span></span>
+          {indices.length > 0 && <span className="xl:hidden shrink-0 w-px h-4 bg-slate-700" />}
+          {indices.map((index) => (
+            <IndexItem key={index.key} index={index} />
+          ))}
         </div>
       </div>
     </header>

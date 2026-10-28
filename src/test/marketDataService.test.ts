@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { batchUpdatePortfolioPrices, fetchLivePriceForAsset, fundPricedToday, hasPlaceholderName, needsFxExposure, tidyAssetName, parseTurkishNumber, quoteInCurrency } from '../services/marketDataService';
+import { batchUpdatePortfolioPrices, fetchLivePriceForAsset, fetchMarketIndices, mergeMarketIndices, MarketIndex, fundPricedToday, hasPlaceholderName, needsFxExposure, tidyAssetName, parseTurkishNumber, quoteInCurrency } from '../services/marketDataService';
 import { makeAsset, RATES } from './fixtures';
 
 describe('parseTurkishNumber', () => {
@@ -133,5 +133,45 @@ describe('asset names', () => {
     expect(tidyAssetName('İŞ PORTFÖY YABANCI HİSSE SENEDİ FONU')).toBe('İş Portföy Yabancı Hisse Senedi Fonu');
     expect(tidyAssetName('TEKNOLOJİ VE  İNOVASYON')).toBe('Teknoloji ve İnovasyon');
     expect(tidyAssetName('Migros Ticaret A.S.')).toBe('Migros Ticaret A.S.');
+  });
+});
+
+describe('market indices', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  const idx = (key: string, price: number): MarketIndex => ({ key, label: key, unit: '', price, changePct: null, asOf: '2026-10-28T10:00:00Z' });
+
+  it('fetches indices from the price API and Bitcoin from Binance', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        const u = new URL(url, 'http://localhost');
+        if (u.hostname === 'api.binance.com') {
+          return new Response(JSON.stringify({ lastPrice: '110000.5', priceChangePercent: '-1.25' }));
+        }
+        const symbol = u.searchParams.get('symbol');
+        if (symbol === 'XU100.IS') {
+          return new Response(JSON.stringify({ price: 10200, previousClose: 10000, currency: 'TRY', source: 'yahoo', asOf: '2026-10-28T10:00:00Z' }));
+        }
+        if (symbol === '^GSPC') {
+          return new Response(JSON.stringify({ price: 6800, currency: 'USD', source: 'yahoo', asOf: '2026-10-27T20:00:00Z' }));
+        }
+        return new Response('null', { status: 404 });
+      })
+    );
+    const result = await fetchMarketIndices();
+    expect(result.map((r) => r.key)).toEqual(['XU100', 'SPX', 'BTC']);
+    expect(result[0].changePct).toBeCloseTo(2);
+    expect(result[1].changePct).toBeNull();
+    expect(result[2]).toMatchObject({ price: 110000.5, changePct: -1.25, unit: '$' });
+  });
+
+  it('keeps the last value of an index whose lookup failed, in display order', () => {
+    const merged = mergeMarketIndices([idx('BTC', 2), idx('XU100', 3)], [idx('XU030', 1), idx('XU100', 9), idx('OLD', 5)]);
+    expect(merged.map((m) => [m.key, m.price])).toEqual([
+      ['XU100', 3],
+      ['XU030', 1],
+      ['BTC', 2],
+    ]);
   });
 });

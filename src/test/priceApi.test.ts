@@ -23,6 +23,29 @@ describe('parseYahooChart', () => {
     });
   });
 
+  it('reads the previous close from daily bars', () => {
+    const day = 86_400;
+    const t0 = 1_761_609_600; // 2026-10-28 00:00 UTC
+    const chart = (meta: object, timestamp: number[], close: (number | null)[]) => ({
+      chart: { result: [{ meta, timestamp, indicators: { quote: [{ close }] } }] },
+    });
+    // Session open today: the bar before today's is the previous close
+    expect(
+      parseYahooChart(chart({ regularMarketPrice: 105, regularMarketTime: t0 + 3600 }, [t0 - 2 * day, t0 - day, t0], [98, 100, 105]))
+        ?.previousClose
+    ).toBe(100);
+    // Today's bar missing: the latest bar is the previous close
+    expect(
+      parseYahooChart(chart({ regularMarketPrice: 105, regularMarketTime: t0 + 3600 }, [t0 - 2 * day, t0 - day], [98, 100]))
+        ?.previousClose
+    ).toBe(100);
+    // Pence listings scale the previous close too
+    expect(
+      parseYahooChart(chart({ regularMarketPrice: 5000, currency: 'GBp', regularMarketTime: t0 }, [t0 - day, t0], [4900, 5000]))
+        ?.previousClose
+    ).toBe(49);
+  });
+
   it('converts London pence to pounds', () => {
     expect(parseYahooChart(yahoo({ regularMarketPrice: 5000, currency: 'GBp' }))).toMatchObject({ price: 50, currency: 'GBP' });
   });

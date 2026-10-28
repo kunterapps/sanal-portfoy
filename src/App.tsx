@@ -22,6 +22,9 @@ import {
   batchUpdatePortfolioPrices, 
   fetchFundFxExposure,
   fetchStockQuote,
+  fetchMarketIndices,
+  mergeMarketIndices,
+  MarketIndex,
   hasPlaceholderName,
   needsFxExposure,
   tidyAssetName,
@@ -48,6 +51,7 @@ import { TransactionModal } from './components/TransactionModal';
 const STORAGE_KEY = 'my_personal_portfolio_assets';
 const RATES_STORAGE_KEY = 'my_personal_portfolio_rates';
 const SNAPSHOTS_STORAGE_KEY = 'my_personal_portfolio_snapshots';
+const INDICES_STORAGE_KEY = 'my_personal_portfolio_indices';
 
 export default function App() {
   // 1. Assets State (Local-first)
@@ -78,6 +82,16 @@ export default function App() {
       }
     } catch {}
     return DEFAULT_EXCHANGE_RATES;
+  });
+
+  // 2a. Market indices shown in the header (last values kept for a quick first paint)
+  const [indices, setIndices] = useState<MarketIndex[]>(() => {
+    try {
+      const parsed = JSON.parse(localStorage.getItem(INDICES_STORAGE_KEY) || '[]');
+      return mergeMarketIndices(Array.isArray(parsed) ? parsed : [], []);
+    } catch {
+      return [];
+    }
   });
 
   // 2b. Daily value history (one snapshot per day)
@@ -123,6 +137,21 @@ export default function App() {
       localStorage.setItem(RATES_STORAGE_KEY, JSON.stringify(rates));
     } catch {}
   }, [rates]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(INDICES_STORAGE_KEY, JSON.stringify(indices));
+    } catch {}
+  }, [indices]);
+
+  const refreshIndices = useCallback(async () => {
+    const fresh = await fetchMarketIndices();
+    setIndices((prev) => mergeMarketIndices(fresh, prev));
+  }, []);
+
+  useEffect(() => {
+    refreshIndices();
+  }, [refreshIndices]);
 
   useEffect(() => {
     try {
@@ -203,7 +232,8 @@ export default function App() {
     showToast('Canlı piyasa verileri taranıyor...');
 
     try {
-      // 1. Refresh exchange rates
+      // 1. Refresh exchange rates (indices load alongside, they don't affect asset values)
+      refreshIndices();
       const newRates = await fetchLiveExchangeRates();
       setRates(newRates);
 
@@ -398,6 +428,7 @@ export default function App() {
       {/* Top Navigation Bar */}
       <Navbar
         rates={rates}
+        indices={indices}
         isRefreshing={isRefreshing}
         onRefresh={handleRefreshPrices}
         onOpenAddModal={() => {
