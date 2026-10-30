@@ -73,7 +73,6 @@ const POPULAR_SUGGESTIONS: Record<AssetCategory, { symbol: string; name: string;
     { symbol: 'USD', name: 'Amerikan Doları (Nakit)', currency: 'TRY' },
     { symbol: 'EUR', name: 'Euro (Nakit)', currency: 'TRY' },
     { symbol: 'GBP', name: 'İngiliz Sterlini (Nakit)', currency: 'TRY' },
-    { symbol: 'TRY', name: 'Türk Lirası Mevduat / Nakit', currency: 'TRY', price: 1 },
   ],
 };
 
@@ -162,13 +161,7 @@ export const AssetModal: React.FC<AssetModalProps> = ({
     } else if (newCat === 'CASH') {
       setCostCurrency('TRY');
       setCurrentCurrency('TRY');
-      if (!editingAsset) {
-        setSymbol('USD');
-        setName('Amerikan Doları (Nakit)');
-        setCurrentPrice(rates.USD_TRY || 49.75);
-        setCostPrice(rates.USD_TRY || 49.75);
-        setQuantity(1000);
-      }
+      if (!editingAsset) startDeposit();
     }
   };
 
@@ -191,6 +184,7 @@ export const AssetModal: React.FC<AssetModalProps> = ({
   const applySuggestion = (s: { symbol: string; name: string; currency: Currency; price?: number }) => {
     setSymbol(s.symbol);
     setName(s.name);
+    setIsDeposit(false);
     setCostCurrency(s.currency);
     setCurrentCurrency(s.currency);
     
@@ -332,26 +326,26 @@ export const AssetModal: React.FC<AssetModalProps> = ({
                 <span>Popüler Örnekler:</span>
               </div>
               <div className="flex flex-wrap gap-1.5">
-                {suggestions.map((s) => (
-                  <button
-                    key={s.symbol}
-                    type="button"
-                    onClick={() => applySuggestion(s)}
-                    className="px-2.5 py-1 rounded-md bg-slate-900 hover:bg-slate-800 border border-slate-800 text-xs text-slate-300 hover:text-white transition-colors tabular-nums"
-                  >
-                    {s.symbol}
-                  </button>
-                ))}
                 {category === 'CASH' && (
                   <button
                     type="button"
                     onClick={startDeposit}
-                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-emerald-950/40 hover:bg-emerald-900/50 border border-emerald-800/60 text-xs text-emerald-300 hover:text-white transition-colors"
+                    className={`inline-flex items-center gap-1 ${chipClass(depositOn)}`}
                   >
                     <Landmark className="w-3 h-3" />
                     Vadeli TL Mevduat
                   </button>
                 )}
+                {suggestions.map((s) => (
+                  <button
+                    key={s.symbol}
+                    type="button"
+                    onClick={() => applySuggestion(s)}
+                    className={`tabular-nums ${chipClass(category === 'CASH' && !depositOn && symbol.trim().toUpperCase() === s.symbol)}`}
+                  >
+                    {s.symbol}
+                  </button>
+                ))}
               </div>
             </div>
           )}
@@ -784,3 +778,11 @@ const DepositPreview: React.FC<{
     </div>
   );
 };
+
+/** Quick-pick chip; the picked one is green, the rest stay gray. */
+const chipClass = (selected: boolean) =>
+  `px-2.5 py-1 rounded-md border text-xs transition-colors ${
+    selected
+      ? 'bg-emerald-950/40 hover:bg-emerald-900/50 border-emerald-800/60 text-emerald-300 hover:text-white'
+      : 'bg-slate-900 hover:bg-slate-800 border-slate-800 text-slate-300 hover:text-white'
+  }`;
