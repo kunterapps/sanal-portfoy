@@ -1,6 +1,7 @@
 import { Currency, ExchangeRates, PortfolioAsset } from '../types/portfolio';
 import { calculateGoldUnitPrice } from '../utils/goldCalculations';
 import { crossRate, getCashUnitPrice } from '../utils/currency';
+import { withDepositPrice } from '../utils/deposit';
 
 // Robust helper to parse Turkish currency and number strings (e.g. "6.384,76", "$3.996,40", "49,7746")
 export function parseTurkishNumber(val: unknown): number {
@@ -391,6 +392,9 @@ export async function fetchLivePriceForAsset(
     }
 
     // 2. Cash Currencies (USD, EUR, GBP, TRY)
+    if (asset.category === 'CASH' && asset.deposit) {
+      return { price: withDepositPrice(asset).currentPrice, success: true };
+    }
     if (asset.category === 'CASH') {
       const price = getCashUnitPrice(asset, rates);
       if (price !== null && price > 0) return { price, success: true };

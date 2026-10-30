@@ -33,6 +33,19 @@ export interface AssetTransaction {
   createdAt: number;       // Tie-breaker for same-day ordering
 }
 
+/**
+ * A TRY cash holding run as a bank deposit. The asset's quantity is the
+ * principal in TL and costPrice is 1, so currentPrice is the growth factor
+ * (value of 1 TL deposited on startDate) and the P/L is the net interest.
+ */
+export interface TimeDeposit {
+  startDate: string;       // YYYY-MM-DD
+  annualRatePct: number;   // Gross annual rate, e.g. 45 for %45
+  termDays: number;        // 1 = günlük (daily, compounding), otherwise vade in days
+  withholdingPct: number;  // Stopaj deducted from interest, e.g. 17.5
+  autoRenew: boolean;      // At maturity, roll principal + net interest into a new term
+}
+
 export interface PortfolioAsset {
   id: string;
   category: AssetCategory;
@@ -58,6 +71,8 @@ export interface PortfolioAsset {
   priceFetchedAt?: string;
   /** When fxExposurePct was last fetched (ISO) */
   fxExposureUpdatedAt?: string;
+  /** TRY cash held as a time deposit */
+  deposit?: TimeDeposit;
 }
 
 export interface ExchangeRates {

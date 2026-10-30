@@ -1,3 +1,4 @@
+import { describeDeposit } from './deposit';
 import { ExchangeRates, GoldType, PortfolioAsset } from '../types/portfolio';
 
 export interface GoldDefinition {
@@ -190,7 +191,7 @@ export function getGoldDisplayDetails(goldType: GoldType) {
  * code as symbol (GRAM_24, ATA_CUMHURIYET); show a readable name instead, and
  * the user's own name underneath when they renamed it.
  */
-export function getAssetDisplay(asset: Pick<PortfolioAsset, 'category' | 'goldType' | 'symbol' | 'name'>): {
+export function getAssetDisplay(asset: Pick<PortfolioAsset, 'category' | 'goldType' | 'symbol' | 'name' | 'deposit'>): {
   title: string;
   subtitle: string;
 } {
@@ -198,6 +199,10 @@ export function getAssetDisplay(asset: Pick<PortfolioAsset, 'category' | 'goldTy
     const def = getGoldDisplayDetails(asset.goldType);
     const renamed = asset.name.trim() && asset.name !== def.name;
     return { title: def.displayName, subtitle: renamed ? asset.name : def.detail };
+  }
+  if (asset.category === 'CASH' && asset.deposit) {
+    const title = asset.deposit.termDays <= 1 ? 'Günlük Mevduat' : 'Vadeli Mevduat';
+    return { title, subtitle: describeDeposit(asset.deposit) };
   }
   return { title: asset.symbol, subtitle: asset.name };
 }

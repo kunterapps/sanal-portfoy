@@ -1,12 +1,20 @@
 import React, { useState, useEffect } from 'react';
-import { X, Sparkles } from 'lucide-react';
+import { X, Sparkles, Landmark } from 'lucide-react';
 import { 
   PortfolioAsset, 
   AssetCategory, 
   Currency, 
   GoldType, 
-  ExchangeRates 
+  ExchangeRates,
+  TimeDeposit,
 } from '../types/portfolio';
+import {
+  DEFAULT_WITHHOLDING_PCT,
+  DEPOSIT_TERM_OPTIONS,
+  getDepositStatus,
+  localToday,
+} from '../utils/deposit';
+import { detectCashCurrency } from '../utils/currency';
 import { 
   TURKISH_GOLD_DEFINITIONS, 
   calculateGoldUnitPrice 
@@ -86,6 +94,8 @@ export const AssetModal: React.FC<AssetModalProps> = ({
   const [currentCurrency, setCurrentCurrency] = useState<Currency>('TRY');
   const [goldType, setGoldType] = useState<GoldType>('CEYREK');
   const [notes, setNotes] = useState('');
+  const [isDeposit, setIsDeposit] = useState(false);
+  const [deposit, setDeposit] = useState<TimeDeposit>(newDeposit());
 
   // With buy/sell history, quantity and average cost come from the transactions
   const managedByTransactions = (editingAsset?.transactions?.length ?? 0) > 1;
@@ -102,6 +112,8 @@ export const AssetModal: React.FC<AssetModalProps> = ({
       setCurrentCurrency(editingAsset.currentCurrency);
       setGoldType(editingAsset.goldType || 'GRAM_24');
       setNotes(editingAsset.notes || '');
+      setIsDeposit(!!editingAsset.deposit);
+      setDeposit(editingAsset.deposit ?? newDeposit());
     } else {
       // Defaults for new asset
       setCategory('BIST');
@@ -114,8 +126,25 @@ export const AssetModal: React.FC<AssetModalProps> = ({
       setCurrentCurrency('TRY');
       setGoldType('CEYREK');
       setNotes('');
+      setIsDeposit(false);
+      setDeposit(newDeposit());
     }
   }, [editingAsset, isOpen]);
+
+  // Only TL cash can be run as a deposit
+  const canBeDeposit = category === 'CASH' && detectCashCurrency({ symbol, name }) === 'TRY';
+  const depositOn = canBeDeposit && isDeposit;
+  const depositStatus = depositOn ? getDepositStatus(deposit) : null;
+  const patchDeposit = (patch: Partial<TimeDeposit>) => setDeposit((d) => ({ ...d, ...patch }));
+
+  const startDeposit = () => {
+    setSymbol('TRY');
+    setName('Türk Lirası Mevduat');
+    setCostCurrency('TRY');
+    setCurrentCurrency('TRY');
+    setIsDeposit(true);
+    if (!editingAsset) setQuantity(100000);
+  };
 
   // Handle Category changes
   const handleCategoryChange = (newCat: AssetCategory) => {
@@ -184,6 +213,28 @@ export const AssetModal: React.FC<AssetModalProps> = ({
     e.preventDefault();
     if (!symbol.trim() || (quantity <= 0 && !managedByTransactions)) return;
 
+    if (depositOn) {
+      onSave(
+        {
+          category,
+          symbol: symbol.trim().toUpperCase(),
+          name: name.trim() || 'Türk Lirası Mevduat',
+          quantity: Number(quantity),
+          costPrice: 1,
+          costCurrency: 'TRY',
+          currentPrice: getDepositStatus(deposit).factor,
+          currentCurrency: 'TRY',
+          notes: notes.trim(),
+          purchaseDate: deposit.startDate,
+          deposit,
+          lastUpdated: new Date().toISOString(),
+        },
+        editingAsset?.id
+      );
+      onClose();
+      return;
+    }
+
     onSave(
       {
         category,
@@ -196,6 +247,7 @@ export const AssetModal: React.FC<AssetModalProps> = ({
         currentCurrency,
         goldType: category === 'COMMODITY' ? goldType : undefined,
         notes: notes.trim(),
+        deposit: undefined,
         lastUpdated: new Date().toISOString(),
       },
       editingAsset?.id
@@ -290,6 +342,16 @@ export const AssetModal: React.FC<AssetModalProps> = ({
                     {s.symbol}
                   </button>
                 ))}
+                {category === 'CASH' && (
+                  <button
+                    type="button"
+                    onClick={startDeposit}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-emerald-950/40 hover:bg-emerald-900/50 border border-emerald-800/60 text-xs text-emerald-300 hover:text-white transition-colors"
+                  >
+                    <Landmark className="w-3 h-3" />
+                    Vadeli TL Mevduat
+                  </button>
+                )}
               </div>
             </div>
           )}
@@ -324,13 +386,26 @@ export const AssetModal: React.FC<AssetModalProps> = ({
             </div>
           </div>
 
+          {canBeDeposit && (
+            <DepositPanel
+              enabled={isDeposit}
+              onToggle={setIsDeposit}
+              deposit={deposit}
+              onChange={patchDeposit}
+              principal={quantity}
+              onPrincipalChange={setQuantity}
+              principalLocked={managedByTransactions}
+            />
+          )}
+
           {/* Quantity & Unit Cost */}
-          {managedByTransactions && (
+          {!depositOn && managedByTransactions && (
             <p className="text-xs text-amber-300 bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-2">
               Bu varlığın alış/satış geçmişi var. Miktar ve ortalama maliyet işlemlerden hesaplanır; değiştirmek için
               tablodaki ⇄ (Alış / Satış İşlemleri) butonunu kullanın.
             </p>
           )}
+          {!depositOn && (<>
           <fieldset disabled={managedByTransactions} className="grid grid-cols-1 sm:grid-cols-3 gap-3 disabled:opacity-50">
             <div>
               <label className="block text-slate-300 font-medium mb-1">
@@ -416,6 +491,8 @@ export const AssetModal: React.FC<AssetModalProps> = ({
             </div>
           </div>
 
+          </>)}
+
           {/* Notes */}
           <div>
             <label className="block text-slate-300 font-medium mb-1">
@@ -431,6 +508,9 @@ export const AssetModal: React.FC<AssetModalProps> = ({
           </div>
 
           {/* Total Preview Box */}
+          {depositStatus ? (
+            <DepositPreview deposit={deposit} principal={quantity} status={depositStatus} />
+          ) : (
           <div className="p-3.5 bg-slate-900/80 border border-slate-800 rounded-xl flex items-center justify-between tabular-nums">
             <span className="text-slate-400 text-xs">Hesaplanan Toplam Değer:</span>
             <div className="text-right">
@@ -447,6 +527,7 @@ export const AssetModal: React.FC<AssetModalProps> = ({
               )}
             </div>
           </div>
+          )}
 
           {/* Footer Actions */}
           <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-800">
@@ -466,6 +547,240 @@ export const AssetModal: React.FC<AssetModalProps> = ({
           </div>
         </form>
       </div>
+    </div>
+  );
+};
+
+function newDeposit(): TimeDeposit {
+  return {
+    startDate: localToday(),
+    annualRatePct: 40,
+    termDays: 32,
+    withholdingPct: DEFAULT_WITHHOLDING_PCT,
+    autoRenew: true,
+  };
+}
+
+const tl = (v: number, digits = 2) =>
+  `₺${new Intl.NumberFormat('tr-TR', { minimumFractionDigits: digits, maximumFractionDigits: digits }).format(v)}`;
+
+const longDate = (iso: string) =>
+  new Intl.DateTimeFormat('tr-TR', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' }).format(
+    new Date(`${iso}T00:00:00Z`)
+  );
+
+const inputClass =
+  'w-full bg-slate-900 border border-slate-800 rounded-xl px-3.5 py-2.5 text-white tabular-nums focus:outline-none focus:border-emerald-500';
+
+const DepositPanel: React.FC<{
+  enabled: boolean;
+  onToggle: (on: boolean) => void;
+  deposit: TimeDeposit;
+  onChange: (patch: Partial<TimeDeposit>) => void;
+  principal: number;
+  onPrincipalChange: (v: number) => void;
+  principalLocked: boolean;
+}> = ({ enabled, onToggle, deposit, onChange, principal, onPrincipalChange, principalLocked }) => {
+  const isPreset = DEPOSIT_TERM_OPTIONS.some((o) => o.days === deposit.termDays);
+  const [customTerm, setCustomTerm] = useState(!isPreset);
+  const daily = deposit.termDays <= 1;
+
+  return (
+    <div className="p-3.5 bg-emerald-950/20 border border-emerald-900/40 rounded-xl space-y-3">
+      <label className="flex items-center gap-2 cursor-pointer select-none">
+        <input
+          type="checkbox"
+          checked={enabled}
+          onChange={(e) => onToggle(e.target.checked)}
+          className="w-4 h-4 accent-emerald-500"
+        />
+        <span className="text-emerald-300 font-semibold">Mevduat hesabı olarak takip et</span>
+        <span className="hidden sm:inline text-slate-400">· faiz her gün işlenir</span>
+      </label>
+
+      {enabled && (
+        <>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div>
+              <label className="block text-slate-300 font-medium mb-1">
+                Anapara (₺) <span className="text-rose-400">*</span>
+              </label>
+              <input
+                type="number"
+                step="any"
+                min="0.01"
+                required
+                disabled={principalLocked}
+                value={principal}
+                onChange={(e) => onPrincipalChange(parseFloat(e.target.value) || 0)}
+                className={`${inputClass} disabled:opacity-50`}
+              />
+            </div>
+            <div>
+              <label className="block text-slate-300 font-medium mb-1">
+                Başlangıç Tarihi <span className="text-rose-400">*</span>
+              </label>
+              <input
+                type="date"
+                required
+                max={localToday()}
+                value={deposit.startDate}
+                onChange={(e) => e.target.value && onChange({ startDate: e.target.value })}
+                className={inputClass}
+              />
+            </div>
+            <div>
+              <label className="block text-slate-300 font-medium mb-1">
+                Yıllık Faiz (brüt %) <span className="text-rose-400">*</span>
+              </label>
+              <input
+                type="number"
+                step="any"
+                min="0"
+                required
+                value={deposit.annualRatePct}
+                onChange={(e) => onChange({ annualRatePct: parseFloat(e.target.value) || 0 })}
+                className={inputClass}
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-slate-300 font-medium mb-1.5">Vade</label>
+            <div className="flex flex-wrap gap-1.5">
+              {DEPOSIT_TERM_OPTIONS.map((o) => {
+                const active = !customTerm && deposit.termDays === o.days;
+                return (
+                  <button
+                    key={o.days}
+                    type="button"
+                    onClick={() => {
+                      setCustomTerm(false);
+                      onChange({ termDays: o.days });
+                    }}
+                    className={`px-3 py-1.5 rounded-lg border text-xs font-semibold transition-colors ${
+                      active
+                        ? 'bg-emerald-600 border-emerald-500 text-white'
+                        : 'bg-slate-900 border-slate-800 text-slate-300 hover:text-white hover:bg-slate-800'
+                    }`}
+                  >
+                    {o.label}
+                  </button>
+                );
+              })}
+              <button
+                type="button"
+                onClick={() => setCustomTerm(true)}
+                className={`px-3 py-1.5 rounded-lg border text-xs font-semibold transition-colors ${
+                  customTerm
+                    ? 'bg-emerald-600 border-emerald-500 text-white'
+                    : 'bg-slate-900 border-slate-800 text-slate-300 hover:text-white hover:bg-slate-800'
+                }`}
+              >
+                Diğer
+              </button>
+              {customTerm && (
+                <div className="flex items-center gap-1.5">
+                  <input
+                    type="number"
+                    min="2"
+                    step="1"
+                    value={deposit.termDays}
+                    onChange={(e) => onChange({ termDays: Math.max(2, Math.round(parseFloat(e.target.value) || 2)) })}
+                    className="w-20 bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-white tabular-nums focus:outline-none focus:border-emerald-500"
+                  />
+                  <span className="text-slate-400">gün</span>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-end">
+            <div>
+              <label className="block text-slate-300 font-medium mb-1">Stopaj (vergi kesintisi %)</label>
+              <input
+                type="number"
+                step="any"
+                min="0"
+                max="100"
+                value={deposit.withholdingPct}
+                onChange={(e) => onChange({ withholdingPct: parseFloat(e.target.value) || 0 })}
+                className={inputClass}
+              />
+            </div>
+            {!daily && (
+              <label className="flex items-center gap-2 cursor-pointer select-none pb-2.5">
+                <input
+                  type="checkbox"
+                  checked={deposit.autoRenew}
+                  onChange={(e) => onChange({ autoRenew: e.target.checked })}
+                  className="w-4 h-4 accent-emerald-500"
+                />
+                <span className="text-slate-300">Vade sonunda faiziyle yenile</span>
+              </label>
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  );
+};
+
+const DepositPreview: React.FC<{
+  deposit: TimeDeposit;
+  principal: number;
+  status: ReturnType<typeof getDepositStatus>;
+}> = ({ deposit, principal, status }) => {
+  const value = principal * status.factor;
+  const earned = value - principal;
+  const daily = status.maturityDate === null;
+  const termNet = principal * status.termNetInterest;
+  const termGross = termNet / (1 - deposit.withholdingPct / 100 || 1);
+
+  return (
+    <div className="p-3.5 bg-slate-900/80 border border-slate-800 rounded-xl tabular-nums space-y-2.5">
+      <div className="flex items-center justify-between">
+        <span className="text-slate-400">Bugünkü değer (net)</span>
+        <div className="text-right">
+          <div className="text-white font-bold text-sm">{tl(value)}</div>
+          <div className="text-xs text-emerald-400">
+            +{tl(earned)} faiz · {status.daysElapsed} gün
+          </div>
+        </div>
+      </div>
+      <div className="border-t border-slate-800 pt-2.5 grid grid-cols-2 gap-x-4 gap-y-1 text-slate-400">
+        {daily ? (
+          <>
+            <span>Günlük net faiz</span>
+            <span className="text-right text-slate-200">{tl(value * status.termNetInterest)}</span>
+            <span>Aylık net (30 gün, yaklaşık)</span>
+            <span className="text-right text-slate-200">
+              {tl(value * (Math.pow(1 + status.termNetInterest, 30) - 1))}
+            </span>
+          </>
+        ) : (
+          <>
+            <span>{status.matured ? 'Vade bitti' : 'Vade sonu'}</span>
+            <span className="text-right text-slate-200">
+              {longDate(status.maturityDate!)}
+              {!status.matured && <span className="text-slate-400"> · {status.daysToMaturity} gün kaldı</span>}
+            </span>
+            <span>Bu vadenin brüt faizi</span>
+            <span className="text-right text-slate-200">{tl(termGross)}</span>
+            <span>Stopaj (%{deposit.withholdingPct.toLocaleString('tr-TR')})</span>
+            <span className="text-right text-rose-300">−{tl(termGross - termNet)}</span>
+            <span>Vade sonu net tutar</span>
+            <span className="text-right text-white font-semibold">
+              {tl(principal * (status.termStartFactor + status.termNetInterest))}
+            </span>
+          </>
+        )}
+      </div>
+      {!daily && !status.matured && (
+        <p className="text-xs text-slate-500">
+          Faiz gün gün tahakkuk ettirilerek gösterilir; banka vadeden önce bozulursa faiz ödemez.
+        </p>
+      )}
     </div>
   );
 };

@@ -23,6 +23,7 @@ import {
 } from '../utils/portfolioCalculations';
 import { getAssetDisplay, getGoldDisplayDetails } from '../utils/goldCalculations';
 import { isClosedPosition } from '../utils/transactions';
+import { depositDueLabel, depositRateLabel } from '../utils/deposit';
 
 interface AssetTableProps {
   assets: PortfolioAsset[];
@@ -455,22 +456,34 @@ export const AssetTable: React.FC<AssetTableProps> = ({
 
                       <div className="grid grid-cols-3 gap-2 text-xs tabular-nums">
                         <div className="min-w-0">
-                          <div className="text-slate-500">Miktar</div>
+                          <div className="text-slate-500">{asset.deposit ? 'Anapara' : 'Miktar'}</div>
                           <div className="text-slate-200 font-medium truncate">
-                            {formatNumber(asset.quantity, asset.quantity % 1 === 0 ? 0 : 4)}{' '}
-                            <span className="text-slate-500">{unitLabel(asset)}</span>
+                            {asset.deposit ? (
+                              formatCurrency(asset.quantity, 'TRY', 0)
+                            ) : (
+                              <>
+                                {formatNumber(asset.quantity, asset.quantity % 1 === 0 ? 0 : 4)}{' '}
+                                <span className="text-slate-500">{unitLabel(asset)}</span>
+                              </>
+                            )}
                           </div>
                         </div>
                         <div className="min-w-0">
-                          <div className="text-slate-500">Ort. Maliyet</div>
-                          <div className="text-slate-300 truncate">{formatCurrency(asset.costPrice, asset.costCurrency, 2)}</div>
+                          <div className="text-slate-500">{asset.deposit ? 'Yıllık faiz' : 'Ort. Maliyet'}</div>
+                          <div className="text-slate-300 truncate">
+                            {asset.deposit
+                              ? depositRateLabel(asset.deposit)
+                              : formatCurrency(asset.costPrice, asset.costCurrency, 2)}
+                          </div>
                         </div>
                         <div className="min-w-0 text-right">
                           <div className="text-slate-500">
-                            Fiyat · <DayChange change={asset.dayChange} />
+                            {asset.deposit ? 'Vade' : 'Fiyat'} · <DayChange change={asset.dayChange} />
                           </div>
                           <div className="text-white font-medium truncate">
-                            {formatCurrency(asset.currentPrice, asset.currentCurrency, 2)}
+                            {asset.deposit
+                              ? depositDueLabel(asset.deposit).replace(/^vade /, '')
+                              : formatCurrency(asset.currentPrice, asset.currentCurrency, 2)}
                           </div>
                         </div>
                       </div>
@@ -621,15 +634,24 @@ export const AssetTable: React.FC<AssetTableProps> = ({
                           </td>
 
                           <td className="py-2.5 px-3 text-right tabular-nums whitespace-nowrap text-slate-200">
-                            {formatNumber(asset.quantity, asset.quantity % 1 === 0 ? 0 : 4)}
-                            <span className="text-slate-500 text-xs ml-1">{unitLabel(asset)}</span>
+                            {asset.deposit ? (
+                              <>
+                                {formatCurrency(asset.quantity, 'TRY', 0)}
+                                <div className="text-xs text-slate-500">anapara</div>
+                              </>
+                            ) : (
+                              <>
+                                {formatNumber(asset.quantity, asset.quantity % 1 === 0 ? 0 : 4)}
+                                <span className="text-slate-500 text-xs ml-1">{unitLabel(asset)}</span>
+                              </>
+                            )}
                           </td>
 
                           <td
                             className="py-2.5 px-3 text-right tabular-nums whitespace-nowrap text-slate-400 hidden 2xl:table-cell"
                             title={`Toplam maliyet ${formatCurrency(asset.quantity * asset.costPrice, asset.costCurrency, 0)}`}
                           >
-                            {formatCurrency(asset.costPrice, asset.costCurrency, 2)}
+                            {asset.deposit ? '—' : formatCurrency(asset.costPrice, asset.costCurrency, 2)}
                           </td>
 
                           <td className="py-2.5 px-3 text-right tabular-nums whitespace-nowrap">
@@ -641,8 +663,13 @@ export const AssetTable: React.FC<AssetTableProps> = ({
                                   <AlertTriangle className="w-3.5 h-3.5 text-amber-400" aria-label="Eski fiyat" />
                                 </span>
                               )}
-                              {formatCurrency(asset.currentPrice, asset.currentCurrency, 2)}
+                              {asset.deposit
+                                ? `${depositRateLabel(asset.deposit)} faiz`
+                                : formatCurrency(asset.currentPrice, asset.currentCurrency, 2)}
                             </span>
+                            {asset.deposit && (
+                              <div className="text-xs text-slate-500">{depositDueLabel(asset.deposit)}</div>
+                            )}
                             {asset.fxExposurePct !== undefined && (
                               <div
                                 className="text-xs text-slate-500"
