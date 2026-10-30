@@ -137,6 +137,27 @@ describe('createPriceService', () => {
     expect(String(fetchFn.mock.calls[1][0])).toContain('query2');
   });
 
+  it('falls back to TradingView for BIST listings Yahoo does not have', async () => {
+    const fetchFn = vi.fn(async (url: string) =>
+      url.includes('tradingview')
+        ? jsonResponse({ totalCount: 1, data: [{ s: 'BIST:ALTINS1', d: [42, 'TRY', 'DARPHANE ALTIN SERTIFIKASI', 5] }] })
+        : jsonResponse({}, false)
+    );
+    const service = createPriceService(fetchFn as unknown as typeof fetch);
+    const quote = await service.getStockQuote('ALTINS1.IS');
+    expect(quote).toMatchObject({ price: 42, currency: 'TRY', source: 'tradingview', previousClose: 40 });
+    const [url, init] = fetchFn.mock.calls[2] as unknown as [string, RequestInit];
+    expect(url).toBe('https://scanner.tradingview.com/turkey/scan');
+    expect(JSON.parse(String(init.body)).symbols.tickers).toEqual(['BIST:ALTINS1']);
+  });
+
+  it('does not ask TradingView for non-BIST symbols', async () => {
+    const fetchFn = vi.fn(async () => jsonResponse({}, false));
+    const service = createPriceService(fetchFn as unknown as typeof fetch);
+    expect(await service.getStockQuote('NVDA')).toBeNull();
+    expect(fetchFn).toHaveBeenCalledTimes(2);
+  });
+
   it('posts the fund code to the TEFAS price endpoint', async () => {
     const fetchFn = vi.fn(async () => jsonResponse({ resultList: [{ tarih: '2026-10-23', fonKodu: 'VEB', fiyat: 0.42 }] }));
     const service = createPriceService(fetchFn as unknown as typeof fetch);
