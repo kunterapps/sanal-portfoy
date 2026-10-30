@@ -1,5 +1,6 @@
 import { AssetCategory, AssetTransaction, Currency, GoldType, PortfolioAsset, PortfolioSnapshot } from '../types/portfolio';
 import { TURKISH_GOLD_DEFINITIONS } from './goldCalculations';
+import { isValidDeposit } from './deposit';
 import { sanitizeSnapshots } from './snapshots';
 import { applyTransactions, ensureTransactions, TransactionError } from './transactions';
 
@@ -114,6 +115,7 @@ export function parsePortfolioBackup(parsed: unknown): ImportResult {
         r.fxExposurePct <= 100 && { fxExposurePct: r.fxExposurePct }),
       ...(typeof r.priceFetchedAt === 'string' && { priceFetchedAt: r.priceFetchedAt }),
       ...(typeof r.fxExposureUpdatedAt === 'string' && { fxExposureUpdatedAt: r.fxExposureUpdatedAt }),
+      ...(r.category === 'CASH' && isValidDeposit(r.deposit) && { deposit: r.deposit }),
     };
 
     if (r.transactions !== undefined && (!Array.isArray(r.transactions) || r.transactions.length > 0)) {

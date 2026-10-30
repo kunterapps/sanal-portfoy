@@ -44,6 +44,7 @@ import {
   upsertTodaySnapshot,
 } from './utils/snapshots';
 import { getCashUnitPrice } from './utils/currency';
+import { withDepositPrice } from './utils/deposit';
 import { getAssetDisplay } from './utils/goldCalculations';
 import { applyTransactions, ensureTransactions, TransactionError } from './utils/transactions';
 import { TransactionModal } from './components/TransactionModal';
@@ -159,6 +160,11 @@ export default function App() {
     } catch {}
   }, [snapshots]);
 
+  // Deposits earn interest by the calendar, so bring them up to today on load
+  useEffect(() => {
+    setAssets((prev) => (prev.some((a) => a.deposit) ? prev.map((a) => withDepositPrice(a)) : prev));
+  }, []);
+
   // Initial Market Rates Fetch on Mount
   useEffect(() => {
     let mounted = true;
@@ -170,7 +176,7 @@ export default function App() {
           // Immediately sync cash holdings with live rates
           setAssets((prevAssets) =>
             prevAssets.map((asset) => {
-              if (asset.category !== 'CASH') return asset;
+              if (asset.category !== 'CASH' || asset.deposit) return asset;
               const price = getCashUnitPrice(asset, liveRates);
               if (price === null || price <= 0) return asset;
               return { ...asset, currentPrice: price, lastUpdated: new Date().toISOString() };
