@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { batchUpdatePortfolioPrices, fetchLivePriceForAsset, fetchMarketIndices, mergeMarketIndices, MarketIndex, fundPricedToday, hasPlaceholderName, needsFxExposure, tidyAssetName, parseTurkishNumber, quoteInCurrency } from '../services/marketDataService';
+import { batchUpdatePortfolioPrices, fetchLiveExchangeRates, fetchLivePriceForAsset, fetchMarketIndices, mergeMarketIndices, MarketIndex, fundPricedToday, hasPlaceholderName, needsFxExposure, tidyAssetName, parseTurkishNumber, quoteInCurrency } from '../services/marketDataService';
 import { makeAsset, RATES } from './fixtures';
 
 describe('parseTurkishNumber', () => {
@@ -173,5 +173,28 @@ describe('market indices', () => {
       ['XU030', 1],
       ['BTC', 2],
     ]);
+  });
+});
+
+describe('fetchLiveExchangeRates (truncgil)', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('reads the daily change of each rate', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        new Response(
+          JSON.stringify({
+            USD: { Satış: '42,1234', Değişim: '%0,12' },
+            EUR: { Satış: '48,90', Değişim: '%-0,35' },
+            'gram-altin': { Satış: '5.912,40', Değişim: '%1,05' },
+            ons: { Satış: '$4.012,50', Değişim: '' },
+          })
+        )
+      )
+    );
+    const rates = await fetchLiveExchangeRates();
+    expect(rates.ONS_GOLD_USD).toBe(4012.5);
+    expect(rates.DAILY_CHANGE_PCT).toEqual({ USD: 0.12, EUR: -0.35, GRAM_GOLD: 1.05, ONS_GOLD: undefined });
   });
 });

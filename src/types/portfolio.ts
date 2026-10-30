@@ -76,6 +76,8 @@ export interface ExchangeRates {
   TAM_GOLD_TRY?: number;
   ATA_GOLD_TRY?: number;
   BILEZIK_22_TRY?: number;
+  /** Daily change in percent as the rate feed reports it (truncgil only) */
+  DAILY_CHANGE_PCT?: { USD?: number; EUR?: number; GRAM_GOLD?: number; ONS_GOLD?: number };
 }
 
 export type TimeRange = '1W' | '1M' | '3M' | '6M' | '1Y' | 'ALL';

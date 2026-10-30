@@ -61,6 +61,9 @@ export async function fetchLiveExchangeRates(): Promise<ExchangeRates> {
       const bilezikTry = parseTurkishNumber(data['22-ayar-bilezik']?.Satış);
       const onsUsd = parseTurkishNumber(data.ons?.Satış);
       const silverTry = parseTurkishNumber(data.gumus?.Satış);
+      // "Değişim" looks like "%0,52" or "%-0,15"
+      const change = (item: { Değişim?: unknown } | undefined) =>
+        typeof item?.Değişim === 'string' && /\d/.test(item.Değişim) ? parseTurkishNumber(item.Değişim) : undefined;
 
       if (gramGoldTry > 1000 && usdTry > 10) {
         return {
@@ -77,6 +80,12 @@ export async function fetchLiveExchangeRates(): Promise<ExchangeRates> {
           TAM_GOLD_TRY: tamTry > 0 ? Math.round(tamTry * 100) / 100 : Math.round(7.016 * 0.916 * gramGoldTry * 1.035),
           ATA_GOLD_TRY: ataTry > 0 ? Math.round(ataTry * 100) / 100 : Math.round(7.216 * 0.916 * gramGoldTry * 1.04),
           BILEZIK_22_TRY: bilezikTry > 0 ? Math.round(bilezikTry * 100) / 100 : Math.round(gramGoldTry * 0.916),
+          DAILY_CHANGE_PCT: {
+            USD: change(data.USD),
+            EUR: change(data.EUR),
+            GRAM_GOLD: change(data['gram-altin'] || data['gram-has-altin']),
+            ONS_GOLD: onsUsd > 1000 ? change(data.ons) : undefined,
+          },
           lastUpdated: new Date().toISOString(),
         };
       }
