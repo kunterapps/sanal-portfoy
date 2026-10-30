@@ -109,6 +109,19 @@ export const TURKISH_GOLD_DEFINITIONS: Record<GoldType, GoldDefinition> = {
     description: '31.1035 gram has altın (USD bazlı)',
     isUnitPiece: false,
   },
+  ALTIN_S1: {
+    type: 'ALTIN_S1',
+    name: 'Darphane Altın Sertifikası (ALTIN.S1)',
+    shortName: 'ALTIN.S1',
+    displayName: 'Altın Sertifikası',
+    detail: 'ALTIN.S1 · adet',
+    weightGrams: 0.01,
+    karat: 24,
+    purity: 1.0,
+    mintingPremiumRatio: 1.0,
+    description: 'Borsa İstanbul, 1 adet = 0.01 gram has altın',
+    isUnitPiece: true,
+  },
   GUMUS_GRAM: {
     type: 'GUMUS_GRAM',
     name: 'Gümüş Gram (Has Gümüş)',
@@ -181,6 +194,11 @@ export function calculateGoldUnitPrice(
   const rawValue = pureWeight * gramGoldTRY;
   return Math.round(rawValue * def.mintingPremiumRatio * 100) / 100;
 }
+
+/** Borsa İstanbul (Yahoo) ticker for gold types that trade on the exchange */
+export const GOLD_EXCHANGE_TICKERS: Partial<Record<GoldType, string>> = {
+  ALTIN_S1: 'ALTINS1.IS',
+};
 
 export function getGoldDisplayDetails(goldType: GoldType) {
   return TURKISH_GOLD_DEFINITIONS[goldType] || TURKISH_GOLD_DEFINITIONS.GRAM_24;

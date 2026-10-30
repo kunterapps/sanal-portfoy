@@ -1,5 +1,5 @@
 import { Currency, ExchangeRates, PortfolioAsset } from '../types/portfolio';
-import { calculateGoldUnitPrice } from '../utils/goldCalculations';
+import { calculateGoldUnitPrice, GOLD_EXCHANGE_TICKERS } from '../utils/goldCalculations';
 import { crossRate, getCashUnitPrice } from '../utils/currency';
 import { withDepositPrice } from '../utils/deposit';
 
@@ -378,6 +378,14 @@ export async function fetchLivePriceForAsset(
 ): Promise<{ price: number; success: boolean; name?: string }> {
   try {
     // 1. Precious Metals & Turkish Gold
+    // Exchange-traded gold (ALTIN.S1) has its own market price, often above or
+    // below gram gold / 100, so take the BIST quote and never an estimate
+    const goldTicker = asset.category === 'COMMODITY' && asset.goldType && GOLD_EXCHANGE_TICKERS[asset.goldType];
+    if (goldTicker) {
+      const quote = await fetchStockQuote(goldTicker);
+      if (quote) return { price: quoteInCurrency(quote, asset.currentCurrency, rates), success: true };
+      return { price: asset.currentPrice, success: false };
+    }
     if (asset.category === 'COMMODITY' && asset.goldType) {
       const unitPrice = calculateGoldUnitPrice(
         asset.goldType,

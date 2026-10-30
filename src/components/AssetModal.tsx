@@ -17,8 +17,10 @@ import {
 import { detectCashCurrency } from '../utils/currency';
 import { 
   TURKISH_GOLD_DEFINITIONS, 
+  GOLD_EXCHANGE_TICKERS,
   calculateGoldUnitPrice 
 } from '../utils/goldCalculations';
+import { fetchStockQuote } from '../services/marketDataService';
 
 interface AssetModalProps {
   isOpen: boolean;
@@ -175,10 +177,21 @@ export const AssetModal: React.FC<AssetModalProps> = ({
     setCurrentPrice(livePrice);
     if (!editingAsset) {
       setCostPrice(livePrice);
-      setQuantity(def.isUnitPiece ? 1 : 10);
+      // 100 certificates = 1 gram
+      setQuantity(gt === 'ALTIN_S1' ? 100 : def.isUnitPiece ? 1 : 10);
     }
     setCostCurrency(gt === 'ONS_GOLD' ? 'USD' : 'TRY');
     setCurrentCurrency(gt === 'ONS_GOLD' ? 'USD' : 'TRY');
+
+    // Exchange-traded gold: replace the gram-based estimate with the market price
+    const ticker = GOLD_EXCHANGE_TICKERS[gt];
+    if (ticker) {
+      fetchStockQuote(ticker).then((quote) => {
+        if (!quote || quote.currency !== 'TRY') return;
+        setCurrentPrice((p) => (p === livePrice ? quote.price : p));
+        if (!editingAsset) setCostPrice((p) => (p === livePrice ? quote.price : p));
+      });
+    }
   };
 
   const applySuggestion = (s: { symbol: string; name: string; currency: Currency; price?: number }) => {
@@ -313,7 +326,9 @@ export const AssetModal: React.FC<AssetModalProps> = ({
                 ))}
               </select>
               <div className="text-xs text-amber-200/70">
-                Seçtiğiniz altın türünün ağırlığı ve ayarı canlı has altın fiyatına göre otomatik hesaplanır.
+                {GOLD_EXCHANGE_TICKERS[goldType]
+                  ? 'Fiyat Borsa İstanbul\'dan canlı alınır. 1 adet sertifika 0,01 gram has altındır; piyasa fiyatı gram altının yüzde birinden biraz farklı olabilir.'
+                  : 'Seçtiğiniz altın türünün ağırlığı ve ayarı canlı has altın fiyatına göre otomatik hesaplanır.'}
               </div>
             </div>
           )}
