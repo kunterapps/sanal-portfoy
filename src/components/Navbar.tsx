@@ -2,7 +2,6 @@ import React, { useEffect, useRef } from 'react';
 import { Plus, TrendingUp, RefreshCw, Download } from 'lucide-react';
 import { ExchangeRates } from '../types/portfolio';
 import { MarketIndex } from '../services/marketDataService';
-import { calculateGoldUnitPrice } from '../utils/goldCalculations';
 import { formatCurrency } from '../utils/portfolioCalculations';
 
 interface NavbarProps {
@@ -17,8 +16,29 @@ interface NavbarProps {
 const formatIndexValue = (value: number) =>
   value.toLocaleString('tr-TR', value >= 1000 ? { maximumFractionDigits: 0 } : { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
+const ChangeBadge: React.FC<{ pct: number | null | undefined }> = ({ pct }) =>
+  typeof pct === 'number' ? (
+    <span className={`ml-1 font-medium ${pct > 0 ? 'text-emerald-400' : pct < 0 ? 'text-rose-400' : 'text-slate-400'}`}>
+      {pct > 0 ? '▲' : pct < 0 ? '▼' : ''}
+      {Math.abs(pct).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%
+    </span>
+  ) : null;
+
+/** Ons altın comes with the exchange rates but is shown among the indices, right before oil */
+function withGoldOunce(indices: MarketIndex[], rates: ExchangeRates): MarketIndex[] {
+  const ounce: MarketIndex = {
+    key: 'ONS',
+    label: 'Ons Altın',
+    unit: '$',
+    price: rates.ONS_GOLD_USD,
+    changePct: rates.DAILY_CHANGE_PCT?.ONS_GOLD ?? null,
+    asOf: rates.lastUpdated,
+  };
+  const at = indices.findIndex((i) => i.key === 'BRENT' || i.key === 'BTC');
+  return at < 0 ? [...indices, ounce] : [...indices.slice(0, at), ounce, ...indices.slice(at)];
+}
+
 const IndexItem: React.FC<{ index: MarketIndex }> = ({ index }) => {
-  const pct = index.changePct;
   const asOf = new Date(index.asOf).toLocaleString('tr-TR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
   return (
     <span className="text-slate-500" title={`${index.label}: ${asOf} itibarıyla`}>
@@ -27,12 +47,7 @@ const IndexItem: React.FC<{ index: MarketIndex }> = ({ index }) => {
         {index.unit}
         {formatIndexValue(index.price)}
       </span>
-      {pct !== null && (
-        <span className={`ml-1 font-medium ${pct > 0 ? 'text-emerald-400' : pct < 0 ? 'text-rose-400' : 'text-slate-400'}`}>
-          {pct > 0 ? '▲' : pct < 0 ? '▼' : ''}
-          {Math.abs(pct).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%
-        </span>
-      )}
+      <ChangeBadge pct={index.changePct} />
     </span>
   );
 };
@@ -45,7 +60,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenAddModal,
   onOpenExportModal,
 }) => {
-  const ceyrekPrice = calculateGoldUnitPrice('CEYREK', rates.GRAM_GOLD_TRY, rates.SILVER_GRAM_TRY, rates);
+  const change = rates.DAILY_CHANGE_PCT;
+  const stripItems = withGoldOunce(indices, rates);
   const headerRef = useRef<HTMLElement>(null);
 
   // Publish the header height (it grows by the rate strip below xl) so sticky content can sit right under it
@@ -77,21 +93,19 @@ export const Navbar: React.FC<NavbarProps> = ({
           <div className="flex items-center gap-1.5">
             <span className="text-slate-500 font-medium">USD/TRY</span>
             <span className="text-slate-200 font-semibold tabular-nums">₺{rates.USD_TRY.toFixed(2)}</span>
+            <ChangeBadge pct={change?.USD} />
           </div>
           <div className="w-px h-4 bg-slate-700" />
           <div className="flex items-center gap-1.5">
             <span className="text-slate-500 font-medium">EUR/TRY</span>
             <span className="text-slate-200 font-semibold tabular-nums">₺{rates.EUR_TRY.toFixed(2)}</span>
+            <ChangeBadge pct={change?.EUR} />
           </div>
           <div className="w-px h-4 bg-slate-700" />
           <div className="flex items-center gap-1.5">
             <span className="text-slate-500 font-medium">Gram Altın</span>
             <span className="text-amber-400 font-semibold tabular-nums">{formatCurrency(rates.GRAM_GOLD_TRY, 'TRY', 0)}</span>
-          </div>
-          <div className="w-px h-4 bg-slate-700" />
-          <div className="flex items-center gap-1.5">
-            <span className="text-slate-500 font-medium">Çeyrek</span>
-            <span className="text-amber-300 font-semibold tabular-nums">{formatCurrency(ceyrekPrice, 'TRY', 0)}</span>
+            <ChangeBadge pct={change?.GRAM_GOLD} />
           </div>
           <button
             onClick={onRefresh}
@@ -125,14 +139,13 @@ export const Navbar: React.FC<NavbarProps> = ({
       </div>
 
       {/* Second strip: rates (only where the ticker above is hidden) and market indices; scrolls sideways when narrow */}
-      <div className={`border-t border-slate-800/80 ${indices.length === 0 ? 'xl:hidden' : ''}`}>
+      <div className="border-t border-slate-800/80">
         <div className="no-scrollbar max-w-[1600px] mx-auto flex items-center gap-4 overflow-x-auto px-4 sm:px-6 lg:px-8 h-9 text-xs whitespace-nowrap tabular-nums [mask-image:linear-gradient(to_right,black_88%,transparent)] xl:[mask-image:none]">
-          <span className="xl:hidden text-slate-500">USD <span className="text-slate-200 font-semibold">₺{rates.USD_TRY.toFixed(2)}</span></span>
-          <span className="xl:hidden text-slate-500">EUR <span className="text-slate-200 font-semibold">₺{rates.EUR_TRY.toFixed(2)}</span></span>
-          <span className="xl:hidden text-slate-500">Gram <span className="text-amber-400 font-semibold">{formatCurrency(rates.GRAM_GOLD_TRY, 'TRY', 0)}</span></span>
-          <span className="xl:hidden text-slate-500">Çeyrek <span className="text-amber-300 font-semibold">{formatCurrency(ceyrekPrice, 'TRY', 0)}</span></span>
-          {indices.length > 0 && <span className="xl:hidden shrink-0 w-px h-4 bg-slate-700" />}
-          {indices.map((index) => (
+          <span className="xl:hidden text-slate-500">USD <span className="text-slate-200 font-semibold">₺{rates.USD_TRY.toFixed(2)}</span><ChangeBadge pct={change?.USD} /></span>
+          <span className="xl:hidden text-slate-500">EUR <span className="text-slate-200 font-semibold">₺{rates.EUR_TRY.toFixed(2)}</span><ChangeBadge pct={change?.EUR} /></span>
+          <span className="xl:hidden text-slate-500">Gram <span className="text-amber-400 font-semibold">{formatCurrency(rates.GRAM_GOLD_TRY, 'TRY', 0)}</span><ChangeBadge pct={change?.GRAM_GOLD} /></span>
+          <span className="xl:hidden shrink-0 w-px h-4 bg-slate-700" />
+          {stripItems.map((index) => (
             <IndexItem key={index.key} index={index} />
           ))}
         </div>
