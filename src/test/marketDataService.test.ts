@@ -70,6 +70,24 @@ describe('quoteInCurrency', () => {
   });
 });
 
+describe('fetchLivePriceForAsset (ALTIN.S1)', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('prices the gold certificate from its BIST quote, not from gram gold', async () => {
+    const fetchMock = vi.fn(async (_url: string) => new Response(JSON.stringify({ price: 41.7, currency: 'TRY', source: 'yahoo', asOf: '' })));
+    vi.stubGlobal('fetch', fetchMock);
+    const asset = makeAsset({ category: 'COMMODITY', goldType: 'ALTIN_S1', symbol: 'ALTIN_S1' });
+    expect(await fetchLivePriceForAsset(asset, RATES)).toEqual({ price: 41.7, success: true });
+    expect(String(fetchMock.mock.calls[0][0])).toContain('symbol=ALTINS1.IS');
+  });
+
+  it('keeps the last price instead of estimating when the quote is missing', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('{}', { status: 404 })));
+    const asset = makeAsset({ category: 'COMMODITY', goldType: 'ALTIN_S1', symbol: 'ALTIN_S1', currentPrice: 39 });
+    expect(await fetchLivePriceForAsset(asset, RATES)).toEqual({ price: 39, success: false });
+  });
+});
+
 describe('fetchLivePriceForAsset (crypto)', () => {
   afterEach(() => vi.unstubAllGlobals());
 

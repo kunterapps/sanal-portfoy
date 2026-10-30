@@ -17,6 +17,7 @@ export type GoldType =
   | 'ATA_CUMHURIYET' 
   | 'BILEZIK_22' 
   | 'ONS_GOLD' 
+  | 'ALTIN_S1' 
   | 'GUMUS_GRAM';
 
 export type TransactionType = 'BUY' | 'SELL';

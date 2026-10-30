@@ -16,6 +16,10 @@ describe('calculateGoldUnitPrice', () => {
     // 1.754g × 0.916 × 4000 × 1.035
     expect(calculateGoldUnitPrice('CEYREK', 4000, 50)).toBeCloseTo(6651.6, 1);
   });
+
+  it('estimates ALTIN.S1 as a hundredth of gram gold', () => {
+    expect(calculateGoldUnitPrice('ALTIN_S1', 4000, 50, RATES)).toBe(40);
+  });
 });
 
 describe('getAssetDisplay', () => {
