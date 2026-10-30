@@ -10,7 +10,7 @@ export interface Quote {
   price: number;
   /** ISO currency as reported by the source, normalized (GBp → GBP) */
   currency: string;
-  source: 'yahoo' | 'tefas';
+  source: 'yahoo' | 'tefas' | 'tradingview';
   /** Source timestamp, ISO */
   asOf: string;
   /** Company or fund name when the source reports one */
@@ -265,6 +265,27 @@ function fundListBody(fund: string, kind: 'YAT' | 'EMK', nowMs: number, days = 1
   };
 }
 
+/**
+ * Extracts a quote from a TradingView scanner response for one ticker,
+ * requested with the columns close, currency, description, change.
+ */
+export function parseTradingViewScan(data: unknown, nowMs: number): Quote | null {
+  const d = (data as { data?: { d?: unknown[] }[] })?.data?.[0]?.d;
+  if (!Array.isArray(d)) return null;
+  const [close, currency, description, changePct] = d;
+  if (typeof close !== 'number' || !(close > 0)) return null;
+  const previousClose =
+    typeof changePct === 'number' && changePct > -100 ? close / (1 + changePct / 100) : undefined;
+  return {
+    price: close,
+    currency: typeof currency === 'string' && currency ? currency : 'TRY',
+    source: 'tradingview',
+    asOf: new Date(nowMs).toISOString(),
+    ...(typeof description === 'string' && description.trim() && { name: description.trim() }),
+    ...(previousClose && { previousClose: Math.round(previousClose * 10000) / 10000 }),
+  };
+}
+
 export function createPriceService(fetchFn: FetchFn = fetch, now: () => number = Date.now) {
   const cache = new Map<string, { expires: number; value: Quote | null }>();
 
@@ -295,8 +316,28 @@ export function createPriceService(fetchFn: FetchFn = fetch, now: () => number =
           // try the next host
         }
       }
+      // Yahoo leaves out some Borsa İstanbul listings, such as the Darphane
+      // gold certificate ALTINS1; TradingView's scanner has the whole exchange
+      if (sym.endsWith('.IS')) return loadTradingView(`BIST:${sym.slice(0, -3)}`);
       return null;
     });
+  }
+
+  async function loadTradingView(ticker: string): Promise<Quote | null> {
+    try {
+      const res = await fetchWithTimeout(fetchFn, 'https://scanner.tradingview.com/turkey/scan', {
+        method: 'POST',
+        headers: { 'User-Agent': USER_AGENT, 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({
+          symbols: { tickers: [ticker], query: { types: [] } },
+          columns: ['close', 'currency', 'description', 'change'],
+        }),
+      });
+      if (!res.ok) return null;
+      return parseTradingViewScan(await res.json(), now());
+    } catch {
+      return null;
+    }
   }
 
   const fundDetails = new Map<string, FundAttempt[]>();
