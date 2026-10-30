@@ -195,9 +195,9 @@ export function calculateGoldUnitPrice(
   return Math.round(rawValue * def.mintingPremiumRatio * 100) / 100;
 }
 
-/** Borsa İstanbul (Yahoo) ticker for gold types that trade on the exchange */
+/** Borsa İstanbul ticker for exchange-traded gold. ALTIN.S1 is BIST:ALTIN on TradingView; Yahoo doesn't list it */
 export const GOLD_EXCHANGE_TICKERS: Partial<Record<GoldType, string>> = {
-  ALTIN_S1: 'ALTINS1.IS',
+  ALTIN_S1: 'ALTIN.IS',
 };
 
 export function getGoldDisplayDetails(goldType: GoldType) {

@@ -140,15 +140,15 @@ describe('createPriceService', () => {
   it('falls back to TradingView for BIST listings Yahoo does not have', async () => {
     const fetchFn = vi.fn(async (url: string) =>
       url.includes('tradingview')
-        ? jsonResponse({ totalCount: 1, data: [{ s: 'BIST:ALTINS1', d: [42, 'TRY', 'DARPHANE ALTIN SERTIFIKASI', 5] }] })
+        ? jsonResponse({ totalCount: 1, data: [{ s: 'BIST:ALTIN', d: [42, 'TRY', 'DARPHANE ALTIN SERTIFIKASI', 5] }] })
         : jsonResponse({}, false)
     );
     const service = createPriceService(fetchFn as unknown as typeof fetch);
-    const quote = await service.getStockQuote('ALTINS1.IS');
+    const quote = await service.getStockQuote('ALTIN.IS');
     expect(quote).toMatchObject({ price: 42, currency: 'TRY', source: 'tradingview', previousClose: 40 });
     const [url, init] = fetchFn.mock.calls[2] as unknown as [string, RequestInit];
     expect(url).toBe('https://scanner.tradingview.com/turkey/scan');
-    expect(JSON.parse(String(init.body)).symbols.tickers).toEqual(['BIST:ALTINS1']);
+    expect(JSON.parse(String(init.body)).symbols.tickers).toEqual(['BIST:ALTIN']);
   });
 
   it('does not ask TradingView for non-BIST symbols', async () => {

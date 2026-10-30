@@ -78,7 +78,7 @@ describe('fetchLivePriceForAsset (ALTIN.S1)', () => {
     vi.stubGlobal('fetch', fetchMock);
     const asset = makeAsset({ category: 'COMMODITY', goldType: 'ALTIN_S1', symbol: 'ALTIN_S1' });
     expect(await fetchLivePriceForAsset(asset, RATES)).toEqual({ price: 41.7, success: true });
-    expect(String(fetchMock.mock.calls[0][0])).toContain('symbol=ALTINS1.IS');
+    expect(String(fetchMock.mock.calls[0][0])).toContain('symbol=ALTIN.IS');
   });
 
   it('keeps the last price instead of estimating when the quote is missing', async () => {

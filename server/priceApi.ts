@@ -317,7 +317,7 @@ export function createPriceService(fetchFn: FetchFn = fetch, now: () => number =
         }
       }
       // Yahoo leaves out some Borsa İstanbul listings, such as the Darphane
-      // gold certificate ALTINS1; TradingView's scanner has the whole exchange
+      // gold certificate (ALTIN.S1, BIST:ALTIN); TradingView's scanner has them
       if (sym.endsWith('.IS')) return loadTradingView(`BIST:${sym.slice(0, -3)}`);
       return null;
     });
