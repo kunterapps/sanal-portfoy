@@ -192,7 +192,7 @@ export interface ServerQuote {
 }
 
 // Price API location: same origin in local dev/preview, the Cloudflare Worker
-// URL in the GitHub Pages build (set via VITE_PRICE_API_URL at build time).
+// URL in the Cloudflare Pages build (set via VITE_PRICE_API_URL at build time).
 const PRICE_API_BASE = (import.meta.env.VITE_PRICE_API_URL || '').replace(/\/+$/, '');
 
 /**

@@ -1,8 +1,8 @@
 /**
- * Cloudflare Worker that serves the price API for the GitHub Pages build.
+ * Cloudflare Worker that serves the price API for the Cloudflare Pages build.
  * Deploy with `npx wrangler deploy` (see README). ALLOWED_ORIGINS is a
  * comma-separated list of sites allowed to call it, e.g.
- * "https://kunterapps.github.io,http://localhost:3000".
+ * "https://sanal-portfoy.pages.dev,http://localhost:3000".
  */
 import { createPriceService, handlePriceRequest } from '../server/priceApi.ts';
 
