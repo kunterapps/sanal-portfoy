@@ -20,7 +20,7 @@ function priceApi(): Plugin {
 
 export default defineConfig(() => {
   return {
-    // GitHub Pages serves the site under /<repo>/ (its workflow sets this); Cloudflare Pages uses /
+    // Cloudflare Pages serves the site from the root; set VITE_BASE to host it under a sub-path
     base: process.env.VITE_BASE || '/',
     plugins: [react(), tailwindcss(), priceApi()],
     resolve: {

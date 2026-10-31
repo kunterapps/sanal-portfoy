@@ -5,7 +5,7 @@ const service = {
   getStockQuote: vi.fn(async () => ({ price: 312, currency: 'TRY', source: 'yahoo' as const, asOf: 'x' })),
   getFundQuote: vi.fn(async () => null),
 };
-const env = { ALLOWED_ORIGINS: 'https://kunterapps.github.io, http://localhost:3000' };
+const env = { ALLOWED_ORIGINS: 'https://sanal-portfoy.pages.dev, http://localhost:3000' };
 
 const req = (path: string, init: RequestInit & { origin?: string } = {}) =>
   new Request(`https://fiyat.example.workers.dev${path}`, {
@@ -15,9 +15,9 @@ const req = (path: string, init: RequestInit & { origin?: string } = {}) =>
 
 describe('price worker', () => {
   it('serves quotes with CORS for allowed origins', async () => {
-    const res = await handleWorkerRequest(req('/api/quote?symbol=THYAO.IS', { origin: 'https://kunterapps.github.io' }), env, service);
+    const res = await handleWorkerRequest(req('/api/quote?symbol=THYAO.IS', { origin: 'https://sanal-portfoy.pages.dev' }), env, service);
     expect(res.status).toBe(200);
-    expect(res.headers.get('Access-Control-Allow-Origin')).toBe('https://kunterapps.github.io');
+    expect(res.headers.get('Access-Control-Allow-Origin')).toBe('https://sanal-portfoy.pages.dev');
     expect(res.headers.get('Cache-Control')).toContain('max-age=60');
     expect(await res.json()).toMatchObject({ price: 312 });
   });
