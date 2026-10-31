@@ -1,0 +1,54 @@
+name: Cloudflare Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cloudflare-pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      # Same secrets as the Worker workflow; the token needs "Cloudflare Pages: Edit"
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      PAGES_PROJECT: sanal-portfoy
+    steps:
+      - if: env.CLOUDFLARE_API_TOKEN == ''
+        run: echo "::warning::CLOUDFLARE_API_TOKEN tanımlı değil, site Cloudflare Pages'e yayınlanmadı. README'deki adımlara bakın."
+      - if: env.CLOUDFLARE_API_TOKEN != ''
+        uses: actions/checkout@v4
+      - if: env.CLOUDFLARE_API_TOKEN != ''
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - if: env.CLOUDFLARE_API_TOKEN != ''
+        run: npm ci
+      - if: env.CLOUDFLARE_API_TOKEN != ''
+        run: npm run lint
+      - if: env.CLOUDFLARE_API_TOKEN != ''
+        run: npm test
+      - if: env.CLOUDFLARE_API_TOKEN != ''
+        run: npm run build
+        env:
+          # Cloudflare Pages serves the site from the domain root
+          VITE_BASE: /
+          VITE_PRICE_API_URL: ${{ vars.PRICE_API_URL }}
+      - name: Create the Pages project on first run
+        if: env.CLOUDFLARE_API_TOKEN != ''
+        run: |
+          if npx wrangler@4 pages project list | grep -q "\b$PAGES_PROJECT\b"; then
+            echo "Pages project $PAGES_PROJECT already exists"
+          else
+            npx wrangler@4 pages project create "$PAGES_PROJECT" --production-branch=main
+          fi
+      - if: env.CLOUDFLARE_API_TOKEN != ''
+        run: npx wrangler@4 pages deploy dist --project-name="$PAGES_PROJECT" --branch=main --commit-dirty=true

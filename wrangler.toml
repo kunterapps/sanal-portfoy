@@ -1,4 +1,4 @@
-# Cloudflare Worker for the price API (used by the GitHub Pages build).
+# Cloudflare Worker for the price API (used by the Cloudflare Pages and GitHub Pages builds).
 # Deploy: npm run worker:deploy, or automatically via .github/workflows/deploy-worker.yml
 name = "sanal-portfoy-fiyat"
 main = "worker/index.ts"
@@ -6,4 +6,4 @@ compatibility_date = "2026-10-01"
 
 [vars]
 # Sites allowed to call the API (comma-separated)
-ALLOWED_ORIGINS = "https://kunterapps.github.io,http://localhost:3000"
+ALLOWED_ORIGINS = "https://sanal-portfoy.pages.dev,https://kunterapps.github.io,http://localhost:3000"

@@ -54,6 +54,12 @@ Sunucu sonuçları önbelleğe alır (hisseler 1 dk, fonlar 10 dk). Fiyatı alı
 
 Fiyat API'si yerelde `npm run dev` / `npm run preview` içinde, yayında Cloudflare Worker'da çalışır. Worker adresi tanımlanmadan yayınlanan bir sitede hisse ve fon fiyatları güncellenmez; döviz, altın ve kripto güncellenmeye devam eder.
 
+## Cloudflare Pages'de yayınlama
+
+Site `https://sanal-portfoy.pages.dev` adresinde Cloudflare Pages'de yayınlanır. "Cloudflare Pages" iş akışı her `main` güncellemesinde siteyi derleyip yükler; ilk çalıştığında Pages projesini kendisi oluşturur. Worker için tanımlanan `CLOUDFLARE_API_TOKEN` ve `CLOUDFLARE_ACCOUNT_ID` secret'larını kullanır (aşağıda "Worker'ı otomatik yayınlama"). Anahtarın izinlerinde **Account › Cloudflare Pages › Edit** bulunmalıdır; yoksa Cloudflare panelinde **My Profile › API Tokens** altından anahtarı düzenleyip bu izni ekleyin. `PRICE_API_URL` değişkeni GitHub Pages ile aynıdır.
+
+Veriler tarayıcıda site adresine bağlı tutulur. Adres değişince eski adresteki sitede üst menüdeki yedekleme düğmesinden **JSON Portföy Yedeği** alıp yeni adreste **JSON Yedeği Yükle** ile geri yükleyin.
+
 ## GitHub Pages'de yayınlama
 
 Site GitHub Pages'de, hisse/fon fiyat API'si ücretsiz bir Cloudflare Worker'da çalışır (ücretsiz katman günde 100.000 istek). Kurulum bir kez yapılır:
