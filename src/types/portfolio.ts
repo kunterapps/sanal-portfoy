@@ -89,6 +89,8 @@ export interface ExchangeRates {
   lastUpdated: string;
   /** Where the rates came from: the Kapalıçarşı feed, the Binance/er-api backup, or built-in defaults */
   source?: 'truncgil' | 'binance' | 'default';
+  /** Set when GRAM_GOLD_TRY was replaced by a TradingView spot price because the feed lagged */
+  GRAM_GOLD_SPOT?: { source: 'tradingview'; asOf: string };
   // Specific live Turkish physical gold prices (Kapalıçarşı / Serbest Piyasa)
   CEYREK_GOLD_TRY?: number;
   YARIM_GOLD_TRY?: number;

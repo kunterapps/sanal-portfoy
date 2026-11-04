@@ -82,7 +82,7 @@ export async function fetchLiveExchangeRates(): Promise<ExchangeRates> {
         typeof item?.Değişim === 'string' && /\d/.test(item.Değişim) ? parseTurkishNumber(item.Değişim) : undefined;
 
       if (gramGoldTry > 1000 && usdTry > 10) {
-        return {
+        const result: ExchangeRates = {
           USD_TRY: Math.round(usdTry * 10000) / 10000,
           EUR_TRY: Math.round((eurTry || usdTry * 1.12) * 10000) / 10000,
           GBP_TRY: Math.round((gbpTry || usdTry * 1.34) * 10000) / 10000,
@@ -105,6 +105,7 @@ export async function fetchLiveExchangeRates(): Promise<ExchangeRates> {
           lastUpdated: parseTruncgilDate(data.Update_Date) ?? new Date().toISOString(),
           source: 'truncgil',
         };
+        return await withSpotGramIfStale(result);
       }
     }
   } catch (err) {
@@ -202,6 +203,29 @@ export async function fetchLiveExchangeRates(): Promise<ExchangeRates> {
 }
 
 /**
+ * When the Kapalıçarşı feed lags more than RATES_STALE_MINUTES, take gram
+ * gold from TradingView spot (via the price API) instead. Everything else
+ * stays as the feed gave it.
+ */
+export async function withSpotGramIfStale(rates: ExchangeRates, now: number = Date.now()): Promise<ExchangeRates> {
+  const at = Date.parse(rates.lastUpdated);
+  if (isNaN(at) || now - at <= RATES_STALE_MINUTES * 60_000) return rates;
+  const spot = await fetchServerQuote('/api/gold-gram');
+  // Guard against a wrong ticker or unit: spot must be near the feed's gram price
+  if (!spot || Math.abs(spot.price / rates.GRAM_GOLD_TRY - 1) > 0.15) return rates;
+  const change =
+    spot.previousClose && spot.previousClose > 0
+      ? Math.round((spot.price / spot.previousClose - 1) * 10000) / 100
+      : rates.DAILY_CHANGE_PCT?.GRAM_GOLD;
+  return {
+    ...rates,
+    GRAM_GOLD_TRY: Math.round(spot.price * 100) / 100,
+    GRAM_GOLD_SPOT: { source: 'tradingview', asOf: spot.asOf },
+    DAILY_CHANGE_PCT: { ...rates.DAILY_CHANGE_PCT, GRAM_GOLD: change },
+  };
+}
+
+/**
  * Built-in defaults are a months-old guess; never let them replace rates we
  * already got from a live source.
  */
@@ -234,7 +258,11 @@ export function describeRates(rates: ExchangeRates, now: number = Date.now()) {
     ageMin,
     ageText,
     stale: rates.source === 'default' || ageMin > RATES_STALE_MINUTES,
-    title: `Kurlar ve altın: ${source}, ${when} itibarıyla (${ageText})`,
+    title:
+      `Kurlar ve altın: ${source}, ${when} itibarıyla (${ageText})` +
+      (rates.GRAM_GOLD_SPOT
+        ? `. Kaynak geride olduğu için gram altın TradingView anlık fiyatından, ${new Date(rates.GRAM_GOLD_SPOT.asOf).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })} itibarıyla`
+        : ''),
   };
 }
 

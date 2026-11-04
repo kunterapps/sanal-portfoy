@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { batchUpdatePortfolioPrices, fetchLiveExchangeRates, fetchLivePriceForAsset, fetchMarketIndices, mergeMarketIndices, MarketIndex, fundPricedToday, hasPlaceholderName, needsFxExposure, tidyAssetName, parseTurkishNumber, quoteInCurrency, parseTruncgilDate, pickRates, describeRates, DEFAULT_EXCHANGE_RATES } from '../services/marketDataService';
+import { batchUpdatePortfolioPrices, fetchLiveExchangeRates, fetchLivePriceForAsset, fetchMarketIndices, mergeMarketIndices, MarketIndex, fundPricedToday, hasPlaceholderName, needsFxExposure, tidyAssetName, parseTurkishNumber, quoteInCurrency, parseTruncgilDate, pickRates, describeRates, DEFAULT_EXCHANGE_RATES, withSpotGramIfStale } from '../services/marketDataService';
 import { makeAsset, RATES } from './fixtures';
 
 describe('parseTurkishNumber', () => {
@@ -262,5 +262,41 @@ describe('rate freshness', () => {
     expect(old?.stale).toBe(true);
     expect(old?.ageText).toBe('40 dk önce');
     expect(describeRates({ ...base, source: 'default', lastUpdated: '2026-11-04T17:10:00Z' }, now)?.stale).toBe(true);
+  });
+});
+
+describe('withSpotGramIfStale', () => {
+  afterEach(() => vi.unstubAllGlobals());
+  const now = Date.parse('2026-11-04T17:10:00Z');
+  const feed = {
+    ...DEFAULT_EXCHANGE_RATES,
+    GRAM_GOLD_TRY: 6499.95,
+    source: 'truncgil' as const,
+    DAILY_CHANGE_PCT: { USD: 0.05, GRAM_GOLD: 3.11 },
+  };
+  const spot = (price: number) =>
+    vi.fn(async () => new Response(JSON.stringify({ price, currency: 'TRY', source: 'tradingview', asOf: '2026-11-04T17:09:30Z', previousClose: 6300 })));
+
+  it('leaves fresh feed rates alone without asking', async () => {
+    const fetchFn = spot(6520);
+    vi.stubGlobal('fetch', fetchFn);
+    const rates = { ...feed, lastUpdated: '2026-11-04T17:00:00Z' };
+    expect(await withSpotGramIfStale(rates, now)).toBe(rates);
+    expect(fetchFn).not.toHaveBeenCalled();
+  });
+
+  it('takes the TradingView gram price when the feed is over 30 minutes old', async () => {
+    vi.stubGlobal('fetch', spot(6520));
+    const rates = await withSpotGramIfStale({ ...feed, lastUpdated: '2026-11-04T16:30:03Z' }, now);
+    expect(rates.GRAM_GOLD_TRY).toBe(6520);
+    expect(rates.GRAM_GOLD_SPOT).toEqual({ source: 'tradingview', asOf: '2026-11-04T17:09:30Z' });
+    expect(rates.DAILY_CHANGE_PCT).toEqual({ USD: 0.05, GRAM_GOLD: 3.49 });
+    expect(rates.USD_TRY).toBe(feed.USD_TRY);
+  });
+
+  it('ignores a spot price far from the feed (wrong unit or ticker)', async () => {
+    vi.stubGlobal('fetch', spot(202000));
+    const rates = { ...feed, lastUpdated: '2026-11-04T16:30:03Z' };
+    expect(await withSpotGramIfStale(rates, now)).toBe(rates);
   });
 });

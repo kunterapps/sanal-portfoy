@@ -286,6 +286,44 @@ export function parseTradingViewScan(data: unknown, nowMs: number): Quote | null
   };
 }
 
+export const TROY_OUNCE_GRAMS = 31.1034768;
+
+/** TradingView tickers asked for the gram gold price, best first */
+export const GOLD_GRAM_TICKERS = ['FX_IDC:XAUTRYG', 'FX_IDC:XAUTRY', 'OANDA:XAUUSD', 'FX_IDC:USDTRY'] as const;
+
+/**
+ * Gram gold in TRY from a TradingView scanner response asked for
+ * GOLD_GRAM_TICKERS with the columns close, change. Uses the per-gram
+ * ticker when present, else the TRY ounce, else USD ounce × USD/TRY.
+ */
+export function parseGoldGramScan(data: unknown, nowMs: number): Quote | null {
+  const rows = (data as { data?: { s?: unknown; d?: unknown[] }[] })?.data;
+  if (!Array.isArray(rows)) return null;
+  const get = (ticker: string) => {
+    const d = rows.find((r) => r?.s === ticker)?.d;
+    const close = Array.isArray(d) ? d[0] : undefined;
+    const change = Array.isArray(d) ? d[1] : undefined;
+    return typeof close === 'number' && close > 0
+      ? { close, change: typeof change === 'number' && change > -100 ? change : undefined }
+      : null;
+  };
+  const quote = (price: number, change?: number): Quote => ({
+    price: Math.round(price * 100) / 100,
+    currency: 'TRY',
+    source: 'tradingview',
+    asOf: new Date(nowMs).toISOString(),
+    ...(change !== undefined && { previousClose: Math.round((price / (1 + change / 100)) * 100) / 100 }),
+  });
+  const gram = get('FX_IDC:XAUTRYG');
+  if (gram) return quote(gram.close, gram.change);
+  const ounceTry = get('FX_IDC:XAUTRY');
+  if (ounceTry) return quote(ounceTry.close / TROY_OUNCE_GRAMS, ounceTry.change);
+  const ounceUsd = get('OANDA:XAUUSD');
+  const usdTry = get('FX_IDC:USDTRY');
+  if (ounceUsd && usdTry) return quote((ounceUsd.close * usdTry.close) / TROY_OUNCE_GRAMS);
+  return null;
+}
+
 export function createPriceService(fetchFn: FetchFn = fetch, now: () => number = Date.now) {
   const cache = new Map<string, { expires: number; value: Quote | null }>();
 
@@ -338,6 +376,26 @@ export function createPriceService(fetchFn: FetchFn = fetch, now: () => number =
     } catch {
       return null;
     }
+  }
+
+  /** Spot gram gold in TRY, the backup for when the Kapalıçarşı feed lags */
+  async function getGoldGramQuote(): Promise<Quote | null> {
+    return cached('tradingview:gold-gram', 60_000, async () => {
+      try {
+        const res = await fetchWithTimeout(fetchFn, 'https://scanner.tradingview.com/global/scan', {
+          method: 'POST',
+          headers: { 'User-Agent': USER_AGENT, 'Content-Type': 'application/json', Accept: 'application/json' },
+          body: JSON.stringify({
+            symbols: { tickers: GOLD_GRAM_TICKERS, query: { types: [] } },
+            columns: ['close', 'change'],
+          }),
+        });
+        if (!res.ok) return null;
+        return parseGoldGramScan(await res.json(), now());
+      } catch {
+        return null;
+      }
+    });
   }
 
   const fundDetails = new Map<string, FundAttempt[]>();
@@ -443,7 +501,7 @@ export function createPriceService(fetchFn: FetchFn = fetch, now: () => number =
     return (await loadAllocations(kind)).get(fund) ?? null;
   }
 
-  return { getStockQuote, getFundQuote, getFundAttempts, getFundAllocation };
+  return { getStockQuote, getFundQuote, getFundAttempts, getFundAllocation, getGoldGramQuote };
 }
 
 export interface ApiResult {
@@ -452,13 +510,14 @@ export interface ApiResult {
 }
 
 type PriceService = Pick<ReturnType<typeof createPriceService>, 'getStockQuote' | 'getFundQuote'> &
-  Partial<Pick<ReturnType<typeof createPriceService>, 'getFundAttempts' | 'getFundAllocation'>>;
+  Partial<Pick<ReturnType<typeof createPriceService>, 'getFundAttempts' | 'getFundAllocation' | 'getGoldGramQuote'>>;
 
 /**
  * Shared request logic for the Node middleware and the Cloudflare Worker:
  *   GET /api/quote?symbol=THYAO.IS
  *   GET /api/fund?code=TCD&kind=YAT|EMK
  *   GET /api/fund-allocation?code=TCD&kind=YAT|EMK
+ *   GET /api/gold-gram (spot gram gold in TRY from TradingView)
  * Returns null for paths outside /api/.
  */
 export async function handlePriceRequest(url: URL, method: string, service: PriceService): Promise<ApiResult | null> {
@@ -492,6 +551,11 @@ export async function handlePriceRequest(url: URL, method: string, service: Pric
       return allocation
         ? { status: 200, body: allocation }
         : { status: 404, body: { error: 'Portföy dağılımı bulunamadı' } };
+    }
+
+    if (url.pathname === '/api/gold-gram' && service.getGoldGramQuote) {
+      const quote = await service.getGoldGramQuote();
+      return quote ? { status: 200, body: quote } : { status: 404, body: { error: 'Fiyat bulunamadı' } };
     }
 
     return { status: 404, body: { error: 'Bilinmeyen uç nokta' } };
