@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { batchUpdatePortfolioPrices, fetchLiveExchangeRates, fetchLivePriceForAsset, fetchMarketIndices, mergeMarketIndices, MarketIndex, fundPricedToday, hasPlaceholderName, needsFxExposure, tidyAssetName, parseTurkishNumber, quoteInCurrency } from '../services/marketDataService';
+import { batchUpdatePortfolioPrices, fetchLiveExchangeRates, fetchLivePriceForAsset, fetchMarketIndices, mergeMarketIndices, MarketIndex, fundPricedToday, hasPlaceholderName, needsFxExposure, tidyAssetName, parseTurkishNumber, quoteInCurrency, parseTruncgilDate, pickRates, describeRates, DEFAULT_EXCHANGE_RATES } from '../services/marketDataService';
 import { makeAsset, RATES } from './fixtures';
 
 describe('parseTurkishNumber', () => {
@@ -212,7 +212,55 @@ describe('fetchLiveExchangeRates (truncgil)', () => {
       )
     );
     const rates = await fetchLiveExchangeRates();
+    expect(rates.source).toBe('truncgil');
     expect(rates.ONS_GOLD_USD).toBe(4012.5);
     expect(rates.DAILY_CHANGE_PCT).toEqual({ USD: 0.12, EUR: -0.35, GRAM_GOLD: 1.05, ONS_GOLD: undefined });
+  });
+});
+
+describe('rate freshness', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('uses the feed own Update_Date (Istanbul time) as the rates time', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        new Response(
+          JSON.stringify({
+            Update_Date: '2026-11-04 19:30:03',
+            USD: { Satış: '50,0250' },
+            'gram-altin': { Satış: '6.499,95' },
+          })
+        )
+      )
+    );
+    const rates = await fetchLiveExchangeRates();
+    expect(rates.lastUpdated).toBe('2026-11-04T16:30:03.000Z');
+  });
+
+  it('parses truncgil dates and rejects junk', () => {
+    expect(parseTruncgilDate('2026-11-04 09:05')).toBe('2026-11-04T06:05:00.000Z');
+    expect(parseTruncgilDate('dün')).toBeNull();
+    expect(parseTruncgilDate(undefined)).toBeNull();
+  });
+
+  it('keeps live rates when every source failed and only defaults came back', () => {
+    const live = { ...DEFAULT_EXCHANGE_RATES, GRAM_GOLD_TRY: 6500, source: 'truncgil' as const };
+    const fallback = { ...DEFAULT_EXCHANGE_RATES };
+    expect(pickRates(live, fallback)).toBe(live);
+    const legacy = { ...live, source: undefined };
+    expect(pickRates(legacy, fallback)).toBe(legacy);
+    const backup = { ...DEFAULT_EXCHANGE_RATES, source: 'binance' as const };
+    expect(pickRates(live, backup)).toBe(backup);
+  });
+
+  it('flags rates older than 30 minutes or from defaults as stale', () => {
+    const now = Date.parse('2026-11-04T17:10:00Z');
+    const base = { ...DEFAULT_EXCHANGE_RATES, source: 'truncgil' as const };
+    expect(describeRates({ ...base, lastUpdated: '2026-11-04T17:00:00Z' }, now)?.stale).toBe(false);
+    const old = describeRates({ ...base, lastUpdated: '2026-11-04T16:30:03Z' }, now);
+    expect(old?.stale).toBe(true);
+    expect(old?.ageText).toBe('40 dk önce');
+    expect(describeRates({ ...base, source: 'default', lastUpdated: '2026-11-04T17:10:00Z' }, now)?.stale).toBe(true);
   });
 });
