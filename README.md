@@ -2,7 +2,7 @@
 
 BIST, yabancı hisse/ETF, TEFAS/BEFAS fonları, Türk altın türleri, döviz ve kripto varlıklarını tek ekranda takip eden kişisel portföy uygulaması. React 19, TypeScript, Vite ve Tailwind CSS ile yazılmıştır.
 
-Veriler yalnızca tarayıcıda (`localStorage`) tutulur, sunucuya gönderilmez. "Yedekle / Yükle" menüsünden JSON yedeği alınabilir.
+Veriler tarayıcıda (`localStorage`) tutulur, sunucuya gönderilmez. "Yedekle / Yükle" menüsünden JSON yedeği alınabilir. İsteğe bağlı olarak Google Drive ile cihazlar arasında eşitlenebilir (aşağıya bakın).
 
 ## Çalıştırma
 
@@ -39,6 +39,7 @@ src/
   test/         Birim testleri
 server/
   priceApi.ts   Fiyat API'si (/api/quote, /api/fund); yerelde Vite, yayında Worker kullanır
+  googleAuth.ts Google Drive eşitlemesi için giriş uçları (/api/google/*)
 worker/
   index.ts      Cloudflare Worker girişi
 ```
@@ -83,6 +84,32 @@ Secret tanımlı değilse iş akışı bir uyarı yazıp hiçbir şey yayınlama
 Worker yalnızca `wrangler.toml` içindeki `ALLOWED_ORIGINS` listesindeki sitelerden gelen istekleri kabul eder. Siteyi başka bir adreste yayınlarsanız bu listeye ekleyin; Worker yeniden yayınlanır (otomatik yayın kurulu değilse `npm run worker:deploy`).
 
 Veriler yine yalnızca tarayıcınızda tutulur; Worker sadece sorulan sembolün fiyatını döndürür, portföy bilgisi saklamaz.
+
+## Birden fazla portföy
+
+Üst menüdeki portföy adına tıklayarak portföyler arasında geçiş yapılabilir, yeni portföy açılabilir, portföyün adı değiştirilebilir veya silinebilir. Her portföyün varlıkları, işlemleri ve değer geçmişi ayrı tutulur; kurlar ve endeksler ortaktır. JSON yedeği o anda açık olan portföyü kapsar, yedek yüklemek de yalnızca açık portföyün içeriğini değiştirir.
+
+Bu özellikten önce girilen veriler "Ana Portföy" adıyla açılır.
+
+## Google Drive ile eşitleme (isteğe bağlı)
+
+Üst menüdeki bulut düğmesinden Google hesabıyla bağlanılırsa tüm portföyler Drive'daki gizli uygulama klasörüne (`appDataFolder`) tek bir `sanal-portfoy.json` dosyası olarak kaydedilir ve aynı hesapla bağlanan her cihazda görünür. Bağlanmadan kullanım bugünkü gibi devam eder.
+
+- Uygulama yalnızca kendi oluşturduğu bu dosyayı görebilir, Drive'daki diğer dosyalara erişemez.
+- Açılışta, sekmeye geri dönüldüğünde, bağlantı geri geldiğinde ve her değişiklikten birkaç saniye sonra eşitlenir. İki cihazda aynı anda değişiklik yapılırsa en son yapılan geçerli olur.
+- Verisi olan bir cihaz ilk kez bağlandığında Drive'da farklı veri varsa hangisinin kullanılacağı sorulur.
+- Google girişi sırasında kod-anahtar değişimini Worker yapar (OAuth "client secret" orada durur). Worker hiçbir şey saklamaz; kalıcı erişim anahtarı yalnızca tarayıcıda tutulur.
+
+Worker'da `GOOGLE_CLIENT_ID` ve `GOOGLE_CLIENT_SECRET` tanımlı değilse bulut düğmesi hiç görünmez. Kurulum bir kez yapılır:
+
+1. [Google Cloud Console](https://console.cloud.google.com/)'da yeni bir proje açın.
+2. **APIs & Services › Library**'de **Google Drive API**'yi bulup **Enable** deyin.
+3. **Google Auth Platform › Branding**'de uygulama adını (ör. Sanal Portföy) ve e-posta adresinizi girin; **Audience**'ta **External** seçin.
+4. **Audience** sayfasında **Publish app** ile uygulamayı "In production" durumuna alın. "Testing" durumunda Google girişi 7 günde bir düşer. Kullanılan izin (`drive.appdata`) hassas sayılmadığı için Google incelemesi gerekmez.
+5. **Clients › Create client**: tür **Web application**. **Authorized JavaScript origins**: `https://sanal-portfoy.pages.dev` ve `http://localhost:3000`. **Authorized redirect URIs**: `https://sanal-portfoy.pages.dev/` ve `http://localhost:3000/` (sondaki `/` dahil). Oluşan **Client ID** ve **Client secret**'ı kopyalayın.
+6. Cloudflare panelinde **Workers & Pages › sanal-portfoy-fiyat › Settings › Variables and Secrets**'ta iki **Secret** ekleyin: `GOOGLE_CLIENT_ID` ve `GOOGLE_CLIENT_SECRET`, sonra **Deploy** deyin. Secret'lar sonraki otomatik Worker yayınlarında korunur.
+
+Yerelde denemek için aynı iki değeri ortam değişkeni olarak verip `npm run dev` çalıştırın.
 
 ## Alış / satış işlemleri
 

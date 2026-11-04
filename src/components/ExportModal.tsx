@@ -9,6 +9,8 @@ interface ExportModalProps {
   assets: PortfolioAsset[];
   rates: ExchangeRates;
   snapshots: PortfolioSnapshot[];
+  /** Goes into the backup and its file name */
+  portfolioName?: string;
   onImportAssets: (imported: PortfolioAsset[], snapshots: PortfolioSnapshot[]) => void;
 }
 
@@ -18,6 +20,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
   assets,
   rates,
   snapshots,
+  portfolioName,
   onImportAssets,
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -30,6 +33,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
     const dataToExport = {
       app: 'PersonalPortfolioTracker',
       exportDate: new Date().toISOString(),
+      ...(portfolioName && { portfolioName }),
       assetsCount: assets.length,
       rates,
       assets,
@@ -40,7 +44,12 @@ export const ExportModal: React.FC<ExportModalProps> = ({
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `portfoy-yedek-${new Date().toISOString().split('T')[0]}.json`;
+    const slug = (portfolioName || '')
+      .toLocaleLowerCase('tr-TR')
+      .replace(/[çğıöşü]/g, (c) => ({ ç: 'c', ğ: 'g', ı: 'i', ö: 'o', ş: 's', ü: 'u' })[c] || c)
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-|-$/g, '');
+    a.download = `portfoy-yedek-${slug ? `${slug}-` : ''}${new Date().toISOString().split('T')[0]}.json`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -66,7 +75,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
         if (
           assets.length > 0 &&
           !window.confirm(
-            `Mevcut ${assets.length} varlığınız silinip yedekteki ${validAssets.length} varlık yüklenecek. Devam edilsin mi?`
+            `${portfolioName ? `"${portfolioName}" portföyündeki` : "Mevcut"} ${assets.length} varlığınız silinip yedekteki ${validAssets.length} varlık yüklenecek. Devam edilsin mi?`
           )
         ) {
           return;
