@@ -48,13 +48,59 @@ import { withDepositPrice } from './utils/deposit';
 import { getAssetDisplay } from './utils/goldCalculations';
 import { applyTransactions, ensureTransactions, TransactionError } from './utils/transactions';
 import { TransactionModal } from './components/TransactionModal';
+import { PortfolioControls } from './components/PortfolioSwitcher';
+import {
+  PortfolioMeta,
+  cleanPortfolioName,
+  createPortfolio,
+  deletePortfolioData,
+  loadActivePortfolioId,
+  loadPortfolioList,
+  portfolioStorageKeys,
+  saveActivePortfolioId,
+  savePortfolioList,
+} from './utils/portfolios';
 
-const STORAGE_KEY = 'my_personal_portfolio_assets';
 const RATES_STORAGE_KEY = 'my_personal_portfolio_rates';
-const SNAPSHOTS_STORAGE_KEY = 'my_personal_portfolio_snapshots';
 const INDICES_STORAGE_KEY = 'my_personal_portfolio_indices';
 
+/** Lists the portfolios and switches between them; each one gets a fresh PortfolioApp */
 export default function App() {
+  const [portfolios, setPortfolios] = useState<PortfolioMeta[]>(() => loadPortfolioList());
+  const [activeId, setActiveId] = useState<string>(() => loadActivePortfolioId(portfolios));
+
+  useEffect(() => savePortfolioList(portfolios), [portfolios]);
+  useEffect(() => saveActivePortfolioId(activeId), [activeId]);
+
+  const controls: PortfolioControls = {
+    portfolios,
+    activeId,
+    onSelect: setActiveId,
+    onCreate: (name) => {
+      const created = createPortfolio(name, portfolios);
+      setPortfolios((prev) => [...prev, created]);
+      setActiveId(created.id);
+    },
+    onRename: (id, name) => {
+      const clean = cleanPortfolioName(name);
+      if (!clean) return;
+      setPortfolios((prev) => prev.map((p) => (p.id === id ? { ...p, name: clean } : p)));
+    },
+    onDelete: (id) => {
+      if (portfolios.length <= 1) return;
+      const rest = portfolios.filter((p) => p.id !== id);
+      deletePortfolioData(id);
+      setPortfolios(rest);
+      if (id === activeId) setActiveId(rest[0].id);
+    },
+  };
+
+  const active = portfolios.find((p) => p.id === activeId) ?? portfolios[0];
+  return <PortfolioApp key={active.id} portfolio={active} controls={controls} />;
+}
+
+function PortfolioApp({ portfolio, controls }: { portfolio: PortfolioMeta; controls: PortfolioControls }) {
+  const { assets: STORAGE_KEY, snapshots: SNAPSHOTS_STORAGE_KEY } = portfolioStorageKeys(portfolio.id);
   // 1. Assets State (Local-first)
   const [assets, setAssets] = useState<PortfolioAsset[]>(() => {
     try {
@@ -442,6 +488,7 @@ export default function App() {
           setIsAssetModalOpen(true);
         }}
         onOpenExportModal={() => setIsExportModalOpen(true)}
+        portfolioControls={controls}
       />
 
       {assets.length === 0 ? (
@@ -584,6 +631,7 @@ export default function App() {
         assets={assets}
         rates={rates}
         snapshots={snapshots}
+        portfolioName={portfolio.name}
         onImportAssets={handleImportAssets}
       />
     </div>

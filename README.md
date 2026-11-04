@@ -84,6 +84,12 @@ Worker yalnızca `wrangler.toml` içindeki `ALLOWED_ORIGINS` listesindeki sitele
 
 Veriler yine yalnızca tarayıcınızda tutulur; Worker sadece sorulan sembolün fiyatını döndürür, portföy bilgisi saklamaz.
 
+## Birden fazla portföy
+
+Üst menüdeki portföy adına tıklayarak portföyler arasında geçiş yapılabilir, yeni portföy açılabilir, portföyün adı değiştirilebilir veya silinebilir. Her portföyün varlıkları, işlemleri ve değer geçmişi ayrı tutulur; kurlar ve endeksler ortaktır. JSON yedeği o anda açık olan portföyü kapsar, yedek yüklemek de yalnızca açık portföyün içeriğini değiştirir.
+
+Bu özellikten önce girilen veriler "Ana Portföy" adıyla açılır.
+
 ## Alış / satış işlemleri
 
 Tablodaki ⇄ butonu bir varlığa alış veya satış işlemi eklemeyi ve işlem geçmişini görmeyi sağlar.

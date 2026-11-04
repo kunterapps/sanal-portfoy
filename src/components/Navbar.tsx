@@ -3,6 +3,7 @@ import { Plus, TrendingUp, RefreshCw, Download } from 'lucide-react';
 import { ExchangeRates } from '../types/portfolio';
 import { MarketIndex } from '../services/marketDataService';
 import { formatCurrency } from '../utils/portfolioCalculations';
+import { PortfolioControls, PortfolioSwitcher } from './PortfolioSwitcher';
 
 interface NavbarProps {
   rates: ExchangeRates;
@@ -11,6 +12,7 @@ interface NavbarProps {
   onRefresh: () => void;
   onOpenAddModal: () => void;
   onOpenExportModal: () => void;
+  portfolioControls: PortfolioControls;
 }
 
 const formatIndexValue = (value: number) =>
@@ -59,6 +61,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onRefresh,
   onOpenAddModal,
   onOpenExportModal,
+  portfolioControls,
 }) => {
   const change = rates.DAILY_CHANGE_PCT;
   const stripItems = withGoldOunce(indices, rates);
@@ -79,13 +82,14 @@ export const Navbar: React.FC<NavbarProps> = ({
     <header ref={headerRef} className="sticky top-0 z-40 w-full border-b border-slate-800 bg-[#090d16]/90 backdrop-blur-md transition-all">
       <div className="max-w-[1600px] mx-auto flex items-center justify-between gap-3 sm:gap-6 px-4 sm:px-6 lg:px-8 h-14 sm:h-16">
         {/* Zone 1: Brand Wordmark */}
-        <div className="flex items-center gap-3 shrink-0">
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-indigo-600 to-indigo-500 flex items-center justify-center font-bold text-white shadow-lg shadow-indigo-500/25">
+        <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+          <div className="w-9 h-9 shrink-0 rounded-xl bg-gradient-to-tr from-indigo-600 to-indigo-500 flex items-center justify-center font-bold text-white shadow-lg shadow-indigo-500/25">
             <TrendingUp className="w-5 h-5 text-white" />
           </div>
-          <span className="text-base font-extrabold tracking-tight text-white whitespace-nowrap">
+          <span className="hidden lg:inline text-base font-extrabold tracking-tight text-white whitespace-nowrap">
             PORTFÖYÜM
           </span>
+          <PortfolioSwitcher controls={portfolioControls} />
         </div>
 
         {/* Zone 2: Live Market Ticker */}
@@ -133,7 +137,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             className="inline-flex items-center gap-1.5 h-9 px-4 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 rounded-lg shadow-sm shadow-indigo-600/30 transition-colors whitespace-nowrap"
           >
             <Plus className="w-4 h-4" />
-            <span>Varlık Ekle</span>
+            <span><span className="hidden min-[420px]:inline">Varlık </span>Ekle</span>
           </button>
         </div>
       </div>
