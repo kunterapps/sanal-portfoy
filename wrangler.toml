@@ -7,3 +7,5 @@ compatibility_date = "2026-10-01"
 [vars]
 # Sites allowed to call the API (comma-separated)
 ALLOWED_ORIGINS = "https://sanal-portfoy.pages.dev,http://localhost:3000"
+# Optional Google Drive sync: set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET as
+# secrets in the Cloudflare dashboard (or `npx wrangler@4 secret put ...`), see README

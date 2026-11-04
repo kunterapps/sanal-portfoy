@@ -49,6 +49,8 @@ import { getAssetDisplay } from './utils/goldCalculations';
 import { applyTransactions, ensureTransactions, TransactionError } from './utils/transactions';
 import { TransactionModal } from './components/TransactionModal';
 import { PortfolioControls } from './components/PortfolioSwitcher';
+import { DriveSyncModal } from './components/DriveSyncModal';
+import { DriveSync, useDriveSync } from './hooks/useDriveSync';
 import {
   PortfolioMeta,
   cleanPortfolioName,
@@ -68,8 +70,27 @@ const INDICES_STORAGE_KEY = 'my_personal_portfolio_indices';
 export default function App() {
   const [portfolios, setPortfolios] = useState<PortfolioMeta[]>(() => loadPortfolioList());
   const [activeId, setActiveId] = useState<string>(() => loadActivePortfolioId(portfolios));
+  // Bumped when Drive sync replaced the stored data, so the open portfolio reloads it
+  const [dataVersion, setDataVersion] = useState(0);
+  const [isSyncOpen, setIsSyncOpen] = useState(false);
 
-  useEffect(() => savePortfolioList(portfolios), [portfolios]);
+  const sync = useDriveSync(() => {
+    const list = loadPortfolioList();
+    setPortfolios(list);
+    setActiveId((id) => (list.some((p) => p.id === id) ? id : list[0].id));
+    setDataVersion((v) => v + 1);
+  });
+
+  // The first sync of a browser that already has data asks which side to keep
+  useEffect(() => {
+    if (sync.status === 'choice') setIsSyncOpen(true);
+  }, [sync.status]);
+
+  useEffect(() => {
+    savePortfolioList(portfolios);
+    sync.notifyChange();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [portfolios]);
   useEffect(() => saveActivePortfolioId(activeId), [activeId]);
 
   const controls: PortfolioControls = {
@@ -96,10 +117,29 @@ export default function App() {
   };
 
   const active = portfolios.find((p) => p.id === activeId) ?? portfolios[0];
-  return <PortfolioApp key={active.id} portfolio={active} controls={controls} />;
+  return (
+    <>
+      <PortfolioApp
+        key={`${active.id}:${dataVersion}`}
+        portfolio={active}
+        controls={controls}
+        sync={sync}
+        onOpenSync={() => setIsSyncOpen(true)}
+      />
+      <DriveSyncModal isOpen={isSyncOpen} onClose={() => setIsSyncOpen(false)} sync={sync} />
+    </>
+  );
 }
 
-function PortfolioApp({ portfolio, controls }: { portfolio: PortfolioMeta; controls: PortfolioControls }) {
+interface PortfolioAppProps {
+  portfolio: PortfolioMeta;
+  controls: PortfolioControls;
+  sync: DriveSync;
+  onOpenSync: () => void;
+}
+
+function PortfolioApp({ portfolio, controls, sync, onOpenSync }: PortfolioAppProps) {
+  const { notifyChange } = sync;
   const { assets: STORAGE_KEY, snapshots: SNAPSHOTS_STORAGE_KEY } = portfolioStorageKeys(portfolio.id);
   // 1. Assets State (Local-first)
   const [assets, setAssets] = useState<PortfolioAsset[]>(() => {
@@ -177,6 +217,7 @@ function PortfolioApp({ portfolio, controls }: { portfolio: PortfolioMeta; contr
     } catch (e) {
       console.error('Failed to save portfolio to localStorage', e);
     }
+    notifyChange();
   }, [assets]);
 
   useEffect(() => {
@@ -204,6 +245,7 @@ function PortfolioApp({ portfolio, controls }: { portfolio: PortfolioMeta; contr
     try {
       localStorage.setItem(SNAPSHOTS_STORAGE_KEY, JSON.stringify(snapshots));
     } catch {}
+    notifyChange();
   }, [snapshots]);
 
   // Deposits earn interest by the calendar, so bring them up to today on load
@@ -489,6 +531,8 @@ function PortfolioApp({ portfolio, controls }: { portfolio: PortfolioMeta; contr
         }}
         onOpenExportModal={() => setIsExportModalOpen(true)}
         portfolioControls={controls}
+        sync={sync}
+        onOpenSync={onOpenSync}
       />
 
       {assets.length === 0 ? (
@@ -593,7 +637,15 @@ function PortfolioApp({ portfolio, controls }: { portfolio: PortfolioMeta; contr
               JSON Yedek
             </button>
             <span>·</span>
-            <span>Veriler yerel tarayıcınızda (localStorage) saklanır</span>
+            <span>
+              {sync.status === 'off' || sync.status === 'unavailable' ? (
+                'Veriler yerel tarayıcınızda (localStorage) saklanır'
+              ) : (
+                <button onClick={onOpenSync} className="hover:text-slate-300 transition-colors">
+                  Veriler Google Drive ile eşitleniyor{sync.email ? ` (${sync.email})` : ''}
+                </button>
+              )}
+            </span>
           </div>
         </div>
       </footer>

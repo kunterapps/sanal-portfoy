@@ -4,6 +4,8 @@ import { ExchangeRates } from '../types/portfolio';
 import { MarketIndex } from '../services/marketDataService';
 import { formatCurrency } from '../utils/portfolioCalculations';
 import { PortfolioControls, PortfolioSwitcher } from './PortfolioSwitcher';
+import { DriveSyncButton } from './DriveSyncModal';
+import { DriveSync } from '../hooks/useDriveSync';
 
 interface NavbarProps {
   rates: ExchangeRates;
@@ -13,6 +15,8 @@ interface NavbarProps {
   onOpenAddModal: () => void;
   onOpenExportModal: () => void;
   portfolioControls: PortfolioControls;
+  sync: DriveSync;
+  onOpenSync: () => void;
 }
 
 const formatIndexValue = (value: number) =>
@@ -62,6 +66,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenAddModal,
   onOpenExportModal,
   portfolioControls,
+  sync,
+  onOpenSync,
 }) => {
   const change = rates.DAILY_CHANGE_PCT;
   const stripItems = withGoldOunce(indices, rates);
@@ -122,7 +128,8 @@ export const Navbar: React.FC<NavbarProps> = ({
         </div>
 
         {/* Zone 3: Primary Action & Tools */}
-        <div className="flex items-center gap-2.5 shrink-0">
+        <div className="flex items-center gap-2 sm:gap-2.5 shrink-0">
+          <DriveSyncButton sync={sync} onClick={onOpenSync} />
           <button
             onClick={onOpenExportModal}
             title="JSON Yedekleme ve İçe/Dışa Aktarma"
