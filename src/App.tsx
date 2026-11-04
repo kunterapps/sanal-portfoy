@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { RefreshCw } from 'lucide-react';
 import { 
   PortfolioAsset, 
@@ -28,7 +28,9 @@ import {
   hasPlaceholderName,
   needsFxExposure,
   tidyAssetName,
-  DEFAULT_EXCHANGE_RATES 
+  DEFAULT_EXCHANGE_RATES,
+  pickRates,
+  describeRates,
 } from './services/marketDataService';
 import { 
   calculatePortfolioTotals, 
@@ -171,6 +173,9 @@ function PortfolioApp({ portfolio, controls, sync, onOpenSync }: PortfolioAppPro
     return DEFAULT_EXCHANGE_RATES;
   });
 
+  const ratesRef = useRef(rates);
+  ratesRef.current = rates;
+
   // 2a. Market indices shown in the header (last values kept for a quick first paint)
   const [indices, setIndices] = useState<MarketIndex[]>(() => {
     try {
@@ -258,8 +263,9 @@ function PortfolioApp({ portfolio, controls, sync, onOpenSync }: PortfolioAppPro
     let mounted = true;
     const initRates = async () => {
       try {
-        const liveRates = await fetchLiveExchangeRates();
+        const fetched = await fetchLiveExchangeRates();
         if (mounted) {
+          const liveRates = pickRates(ratesRef.current, fetched);
           setRates(liveRates);
           // Immediately sync cash holdings with live rates
           setAssets((prevAssets) =>
@@ -328,7 +334,7 @@ function PortfolioApp({ portfolio, controls, sync, onOpenSync }: PortfolioAppPro
     try {
       // 1. Refresh exchange rates (indices load alongside, they don't affect asset values)
       refreshIndices();
-      const newRates = await fetchLiveExchangeRates();
+      const newRates = pickRates(rates, await fetchLiveExchangeRates());
       setRates(newRates);
 
       // 2. Refresh assets if any
@@ -505,9 +511,7 @@ function PortfolioApp({ portfolio, controls, sync, onOpenSync }: PortfolioAppPro
 
   const staleCount = assets.filter((a) => a.priceStale && a.quantity > 0).length;
 
-  const lastPriceTime = rates.lastUpdated
-    ? new Date(rates.lastUpdated).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })
-    : null;
+  const ratesInfo = describeRates(rates);
 
   return (
     <div className="min-h-screen bg-[#090d16] text-slate-100 flex flex-col selection:bg-indigo-500 selection:text-white">
@@ -575,7 +579,13 @@ function PortfolioApp({ portfolio, controls, sync, onOpenSync }: PortfolioAppPro
               <div className="flex items-baseline gap-3 min-w-0">
                 <h2 className="text-lg font-semibold text-white">Varlıklar</h2>
                 <span className="text-sm text-slate-500 tabular-nums truncate">
-                  {totals.assetCount} açık pozisyon{lastPriceTime ? ` · kurlar ${lastPriceTime}` : ''}
+                  {totals.assetCount} açık pozisyon
+                  {ratesInfo && (
+                    <span className={ratesInfo.stale ? 'text-amber-400' : undefined} title={ratesInfo.title}>
+                      {` · kurlar ${ratesInfo.time}`}
+                      {ratesInfo.stale ? ` (${ratesInfo.ageText})` : ''}
+                    </span>
+                  )}
                 </span>
               </div>
               <button

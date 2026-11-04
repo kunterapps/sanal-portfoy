@@ -1,7 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { Plus, TrendingUp, RefreshCw, Download } from 'lucide-react';
 import { ExchangeRates } from '../types/portfolio';
-import { MarketIndex } from '../services/marketDataService';
+import { MarketIndex, describeRates } from '../services/marketDataService';
 import { formatCurrency } from '../utils/portfolioCalculations';
 import { PortfolioControls, PortfolioSwitcher } from './PortfolioSwitcher';
 import { DriveSyncButton } from './DriveSyncModal';
@@ -70,6 +70,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenSync,
 }) => {
   const change = rates.DAILY_CHANGE_PCT;
+  const ratesInfo = describeRates(rates);
   const stripItems = withGoldOunce(indices, rates);
   const headerRef = useRef<HTMLElement>(null);
 
@@ -112,7 +113,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             <ChangeBadge pct={change?.EUR} />
           </div>
           <div className="w-px h-4 bg-slate-700" />
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1.5" title={ratesInfo?.title}>
             <span className="text-slate-500 font-medium">Gram Altın</span>
             <span className="text-amber-400 font-semibold tabular-nums">{formatCurrency(rates.GRAM_GOLD_TRY, 'TRY', 0)}</span>
             <ChangeBadge pct={change?.GRAM_GOLD} />
@@ -154,7 +155,7 @@ export const Navbar: React.FC<NavbarProps> = ({
         <div className="no-scrollbar max-w-[1600px] mx-auto flex items-center gap-4 overflow-x-auto px-4 sm:px-6 lg:px-8 h-9 text-xs whitespace-nowrap tabular-nums [mask-image:linear-gradient(to_right,black_88%,transparent)] xl:[mask-image:none]">
           <span className="xl:hidden text-slate-500">USD <span className="text-slate-200 font-semibold">₺{rates.USD_TRY.toFixed(2)}</span><ChangeBadge pct={change?.USD} /></span>
           <span className="xl:hidden text-slate-500">EUR <span className="text-slate-200 font-semibold">₺{rates.EUR_TRY.toFixed(2)}</span><ChangeBadge pct={change?.EUR} /></span>
-          <span className="xl:hidden text-slate-500">Gram <span className="text-amber-400 font-semibold">{formatCurrency(rates.GRAM_GOLD_TRY, 'TRY', 0)}</span><ChangeBadge pct={change?.GRAM_GOLD} /></span>
+          <span className="xl:hidden text-slate-500" title={ratesInfo?.title}>Gram <span className="text-amber-400 font-semibold">{formatCurrency(rates.GRAM_GOLD_TRY, 'TRY', 0)}</span><ChangeBadge pct={change?.GRAM_GOLD} /></span>
           <span className="xl:hidden shrink-0 w-px h-4 bg-slate-700" />
           {stripItems.map((index) => (
             <IndexItem key={index.key} index={index} />

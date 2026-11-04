@@ -7,6 +7,7 @@ import {
   parseTefasAllocation,
   parseTefasFunds,
   parseYahooChart,
+  parseGoldGramScan,
 } from '../../server/priceApi';
 
 const yahoo = (meta: object, closes: (number | null)[] = []) => ({
@@ -309,5 +310,35 @@ describe('TEFAS fallbacks', () => {
     const details = (result?.body as { details: { source: string; status: number; note?: string }[] }).details;
     expect(details.map((d) => d.source)).toEqual(['tefas-fiyat', 'tefas-bilgi']);
     expect(details[0]).toMatchObject({ status: 403, note: 'Access denied' });
+  });
+});
+
+describe('gram gold from TradingView', () => {
+  const now = Date.parse('2026-11-04T17:15:00Z');
+
+  it('prefers the per-gram ticker', () => {
+    const q = parseGoldGramScan(
+      { data: [{ s: 'FX_IDC:XAUTRY', d: [202000, 3] }, { s: 'FX_IDC:XAUTRYG', d: [6512.4, 2] }] },
+      now
+    );
+    expect(q).toMatchObject({ price: 6512.4, currency: 'TRY', source: 'tradingview', previousClose: 6384.71 });
+  });
+
+  it('falls back to the ounce in TRY, then USD ounce × USD/TRY', () => {
+    expect(parseGoldGramScan({ data: [{ s: 'FX_IDC:XAUTRY', d: [311034.768, null] }] }, now)?.price).toBe(10000);
+    expect(
+      parseGoldGramScan({ data: [{ s: 'OANDA:XAUUSD', d: [4000, 1] }, { s: 'FX_IDC:USDTRY', d: [50, 0] }] }, now)?.price
+    ).toBe(6430.15);
+    expect(parseGoldGramScan({ data: [{ s: 'OANDA:XAUUSD', d: [4000, 1] }] }, now)).toBeNull();
+  });
+
+  it('serves /api/gold-gram from the global scanner', async () => {
+    const fetchFn = vi.fn(async () => jsonResponse({ data: [{ s: 'FX_IDC:XAUTRYG', d: [6512.4, 2] }] }));
+    const service = createPriceService(fetchFn as unknown as typeof fetch);
+    const result = await handlePriceRequest(new URL('http://x/api/gold-gram'), 'GET', service);
+    expect(result).toMatchObject({ status: 200, body: { price: 6512.4 } });
+    const [url, init] = fetchFn.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe('https://scanner.tradingview.com/global/scan');
+    expect(JSON.parse(String(init.body)).symbols.tickers[0]).toBe('FX_IDC:XAUTRYG');
   });
 });

@@ -28,7 +28,20 @@ export const DEFAULT_EXCHANGE_RATES: ExchangeRates = {
   ATA_GOLD_TRY: 43484,
   BILEZIK_22_TRY: 5890,
   lastUpdated: new Date().toISOString(),
+  source: 'default',
 };
+
+/**
+ * truncgil stamps its feed with Istanbul wall-clock time, e.g. "2026-11-04 19:30:03".
+ * Returns it as an ISO string, or null when missing or unparseable.
+ */
+export function parseTruncgilDate(val: unknown): string | null {
+  if (typeof val !== 'string') return null;
+  const m = val.trim().match(/^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2}(?::\d{2})?)$/);
+  if (!m) return null;
+  const d = new Date(`${m[1]}T${m[2].length === 5 ? m[2] + ':00' : m[2]}+03:00`);
+  return isNaN(d.getTime()) ? null : d.toISOString();
+}
 
 /**
  * Fetches real-time market exchange rates and Turkish gold prices.
@@ -44,8 +57,10 @@ export async function fetchLiveExchangeRates(): Promise<ExchangeRates> {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 4500);
 
+    // no-store: never let the browser hand back an earlier copy of the feed
     const res = await fetch('https://finans.truncgil.com/today.json', {
       signal: controller.signal,
+      cache: 'no-store',
     });
     clearTimeout(timeoutId);
 
@@ -67,7 +82,7 @@ export async function fetchLiveExchangeRates(): Promise<ExchangeRates> {
         typeof item?.Değişim === 'string' && /\d/.test(item.Değişim) ? parseTurkishNumber(item.Değişim) : undefined;
 
       if (gramGoldTry > 1000 && usdTry > 10) {
-        return {
+        const result: ExchangeRates = {
           USD_TRY: Math.round(usdTry * 10000) / 10000,
           EUR_TRY: Math.round((eurTry || usdTry * 1.12) * 10000) / 10000,
           GBP_TRY: Math.round((gbpTry || usdTry * 1.34) * 10000) / 10000,
@@ -87,8 +102,10 @@ export async function fetchLiveExchangeRates(): Promise<ExchangeRates> {
             GRAM_GOLD: change(data['gram-altin'] || data['gram-has-altin']),
             ONS_GOLD: onsUsd > 1000 ? change(data.ons) : undefined,
           },
-          lastUpdated: new Date().toISOString(),
+          lastUpdated: parseTruncgilDate(data.Update_Date) ?? new Date().toISOString(),
+          source: 'truncgil',
         };
+        return await withSpotGramIfStale(result);
       }
     }
   } catch (err) {
@@ -172,14 +189,81 @@ export async function fetchLiveExchangeRates(): Promise<ExchangeRates> {
       ATA_GOLD_TRY: ataTry,
       BILEZIK_22_TRY: bilezikTry,
       lastUpdated: new Date().toISOString(),
+      // Only a real backup quote if gold actually came from Binance
+      source: gramGoldTry === DEFAULT_EXCHANGE_RATES.GRAM_GOLD_TRY ? 'default' : 'binance',
     };
   } catch (err) {
     console.warn('Could not fetch secondary live rates, using updated baseline rates', err);
     return {
       ...DEFAULT_EXCHANGE_RATES,
       lastUpdated: new Date().toISOString(),
+      source: 'default',
     };
   }
+}
+
+/**
+ * When the Kapalıçarşı feed lags more than RATES_STALE_MINUTES, take gram
+ * gold from TradingView spot (via the price API) instead. Everything else
+ * stays as the feed gave it.
+ */
+export async function withSpotGramIfStale(rates: ExchangeRates, now: number = Date.now()): Promise<ExchangeRates> {
+  const at = Date.parse(rates.lastUpdated);
+  if (isNaN(at) || now - at <= RATES_STALE_MINUTES * 60_000) return rates;
+  const spot = await fetchServerQuote('/api/gold-gram');
+  // Guard against a wrong ticker or unit: spot must be near the feed's gram price
+  if (!spot || Math.abs(spot.price / rates.GRAM_GOLD_TRY - 1) > 0.15) return rates;
+  const change =
+    spot.previousClose && spot.previousClose > 0
+      ? Math.round((spot.price / spot.previousClose - 1) * 10000) / 100
+      : rates.DAILY_CHANGE_PCT?.GRAM_GOLD;
+  return {
+    ...rates,
+    GRAM_GOLD_TRY: Math.round(spot.price * 100) / 100,
+    GRAM_GOLD_SPOT: { source: 'tradingview', asOf: spot.asOf },
+    DAILY_CHANGE_PCT: { ...rates.DAILY_CHANGE_PCT, GRAM_GOLD: change },
+  };
+}
+
+/**
+ * Built-in defaults are a months-old guess; never let them replace rates we
+ * already got from a live source.
+ */
+export function pickRates(previous: ExchangeRates, next: ExchangeRates): ExchangeRates {
+  if (next.source === 'default' && previous.source !== 'default') return previous;
+  return next;
+}
+
+const RATE_SOURCE_LABEL: Record<NonNullable<ExchangeRates['source']>, string> = {
+  truncgil: 'Kapalıçarşı (finans.truncgil.com)',
+  binance: 'yedek kaynak (Binance PAXG + open.er-api.com)',
+  default: 'yerleşik varsayılan değerler (canlı kaynağa ulaşılamadı)',
+};
+
+/** Feed time older than this counts as stale (truncgil normally refreshes every few minutes) */
+export const RATES_STALE_MINUTES = 30;
+
+/** Time, age and source of the rates for the UI; null when there's no usable timestamp */
+export function describeRates(rates: ExchangeRates, now: number = Date.now()) {
+  const at = new Date(rates.lastUpdated);
+  if (!rates.lastUpdated || isNaN(at.getTime())) return null;
+  const ageMin = Math.max(0, Math.round((now - at.getTime()) / 60000));
+  const ageText =
+    ageMin < 60 ? `${ageMin} dk önce` : ageMin < 48 * 60 ? `${Math.round(ageMin / 60)} saat önce` : `${Math.round(ageMin / 1440)} gün önce`;
+  const time = at.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
+  const when = at.toLocaleString('tr-TR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+  const source = rates.source ? RATE_SOURCE_LABEL[rates.source] : 'bilinmeyen kaynak';
+  return {
+    time,
+    ageMin,
+    ageText,
+    stale: rates.source === 'default' || ageMin > RATES_STALE_MINUTES,
+    title:
+      `Kurlar ve altın: ${source}, ${when} itibarıyla (${ageText})` +
+      (rates.GRAM_GOLD_SPOT
+        ? `. Kaynak geride olduğu için gram altın TradingView anlık fiyatından, ${new Date(rates.GRAM_GOLD_SPOT.asOf).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })} itibarıyla`
+        : ''),
+  };
 }
 
 export interface ServerQuote {
