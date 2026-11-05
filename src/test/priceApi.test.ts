@@ -362,14 +362,14 @@ describe('stale BIST quotes from Yahoo', () => {
   it("takes TradingView's quote when Yahoo still serves yesterday's", async () => {
     const fetchFn = vi.fn(async (url: string) =>
       url.includes('tradingview')
-        ? jsonResponse({ totalCount: 1, data: [{ s: 'BIST:XU100', d: [10800, 'TRY', 'BIST 100', -1] }] })
+        ? jsonResponse({ totalCount: 1, data: [{ s: 'BIST:AKBNK', d: [10800, 'TRY', 'BIST 100', -1] }] })
         : jsonResponse(yahoo({ regularMarketPrice: 10909.09, previousClose: 10800, currency: 'TRY', regularMarketTime: yesterdayClose, shortName: 'BIST 100' }))
     );
     const service = createPriceService(fetchFn as unknown as typeof fetch, () => now);
-    const q = await service.getStockQuote('XU100.IS');
+    const q = await service.getStockQuote('AKBNK.IS');
     expect(q).toMatchObject({ price: 10800, source: 'tradingview', name: 'BIST 100' });
     expect((q!.price / q!.previousClose! - 1) * 100).toBeCloseTo(-1, 6);
-    expect(JSON.parse(String((fetchFn.mock.calls[1] as unknown as [string, RequestInit])[1].body)).symbols.tickers).toEqual(['BIST:XU100']);
+    expect(JSON.parse(String((fetchFn.mock.calls[1] as unknown as [string, RequestInit])[1].body)).symbols.tickers).toEqual(['BIST:AKBNK']);
   });
 
   it("keeps Yahoo's quote when TradingView fails or the quote is today's", async () => {
@@ -378,12 +378,30 @@ describe('stale BIST quotes from Yahoo', () => {
         ? jsonResponse({}, false)
         : jsonResponse(yahoo({ regularMarketPrice: 10909, previousClose: 10800, currency: 'TRY', regularMarketTime: yesterdayClose }))
     );
-    expect((await createPriceService(failing as unknown as typeof fetch, () => now).getStockQuote('XU100.IS'))?.source).toBe('yahoo');
+    expect((await createPriceService(failing as unknown as typeof fetch, () => now).getStockQuote('AKBNK.IS'))?.source).toBe('yahoo');
 
     const today = vi.fn(async () =>
       jsonResponse(yahoo({ regularMarketPrice: 10700, previousClose: 10909, currency: 'TRY', regularMarketTime: now / 1000 - 900 }))
     );
-    expect((await createPriceService(today as unknown as typeof fetch, () => now).getStockQuote('XU100.IS'))?.source).toBe('yahoo');
+    expect((await createPriceService(today as unknown as typeof fetch, () => now).getStockQuote('AKBNK.IS'))?.source).toBe('yahoo');
     expect(today).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('BIST indices', () => {
+  it('come from TradingView first', async () => {
+    const fetchFn = vi.fn(async () => jsonResponse({ totalCount: 1, data: [{ s: 'BIST:XU100', d: [10800, 'TRY', 'BIST 100', -1] }] }));
+    const q = await createPriceService(fetchFn as unknown as typeof fetch).getStockQuote('XU100.IS');
+    expect(q).toMatchObject({ price: 10800, source: 'tradingview' });
+    expect(fetchFn).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(String((fetchFn.mock.calls[0] as unknown as [string, RequestInit])[1].body)).symbols.tickers).toEqual(['BIST:XU100']);
+  });
+
+  it('fall back to Yahoo when TradingView fails', async () => {
+    const fetchFn = vi.fn(async (url: string) =>
+      url.includes('tradingview') ? jsonResponse({}, false) : jsonResponse(yahoo({ regularMarketPrice: 10700, previousClose: 10800, currency: 'TRY' }))
+    );
+    const q = await createPriceService(fetchFn as unknown as typeof fetch).getStockQuote('XU030.IS');
+    expect(q).toMatchObject({ price: 10700, source: 'yahoo' });
   });
 });

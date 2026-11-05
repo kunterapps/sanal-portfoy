@@ -324,6 +324,9 @@ export function parseGoldGramScan(data: unknown, nowMs: number): Quote | null {
   return null;
 }
 
+/** Borsa İstanbul index symbols as Yahoo spells them, e.g. XU100.IS */
+const BIST_INDEX_RE = /^XU[A-Z0-9]{3}\.IS$/;
+
 const TR_OFFSET_MS = 3 * 3_600_000;
 
 /**
@@ -357,6 +360,12 @@ export function createPriceService(fetchFn: FetchFn = fetch, now: () => number =
     const sym = symbol.trim().toUpperCase();
     if (!SYMBOL_RE.test(sym)) return null;
     return cached(`yahoo:${sym}`, 60_000, async () => {
+      // Borsa İstanbul indices (XU100, XU030…) come from TradingView first:
+      // Yahoo's daily change for them lagged a session behind
+      if (BIST_INDEX_RE.test(sym)) {
+        const tv = await loadTradingView(`BIST:${sym.slice(0, -3)}`);
+        if (tv) return tv;
+      }
       for (const host of ['query1', 'query2']) {
         try {
           const res = await fetchWithTimeout(
