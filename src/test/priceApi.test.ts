@@ -8,6 +8,7 @@ import {
   parseTefasFunds,
   parseYahooChart,
   parseGoldGramScan,
+  bistQuoteIsStale,
 } from '../../server/priceApi';
 
 const yahoo = (meta: object, closes: (number | null)[] = []) => ({
@@ -340,5 +341,49 @@ describe('gram gold from TradingView', () => {
     const [url, init] = fetchFn.mock.calls[0] as unknown as [string, RequestInit];
     expect(url).toBe('https://scanner.tradingview.com/global/scan');
     expect(JSON.parse(String(init.body)).symbols.tickers[0]).toBe('FX_IDC:XAUTRYG');
+  });
+});
+
+describe('stale BIST quotes from Yahoo', () => {
+  // Thursday 2026-11-05 14:40 Türkiye time
+  const now = Date.parse('2026-11-05T11:40:00Z');
+  const yesterdayClose = Date.parse('2026-11-04T15:10:00Z') / 1000;
+
+  it('flags a previous-day quote only while the session is open', () => {
+    const q = { price: 1, currency: 'TRY', source: 'yahoo' as const, asOf: new Date(yesterdayClose * 1000).toISOString() };
+    expect(bistQuoteIsStale(q, now)).toBe(true);
+    expect(bistQuoteIsStale({ ...q, asOf: '2026-11-05T11:25:00Z' }, now)).toBe(false);
+    // before the open, after the close, and at the weekend the last session is the right one
+    expect(bistQuoteIsStale(q, Date.parse('2026-11-05T06:30:00Z'))).toBe(false);
+    expect(bistQuoteIsStale(q, Date.parse('2026-11-05T16:00:00Z'))).toBe(false);
+    expect(bistQuoteIsStale(q, Date.parse('2026-11-07T11:40:00Z'))).toBe(false);
+  });
+
+  it("takes TradingView's quote when Yahoo still serves yesterday's", async () => {
+    const fetchFn = vi.fn(async (url: string) =>
+      url.includes('tradingview')
+        ? jsonResponse({ totalCount: 1, data: [{ s: 'BIST:XU100', d: [10800, 'TRY', 'BIST 100', -1] }] })
+        : jsonResponse(yahoo({ regularMarketPrice: 10909.09, previousClose: 10800, currency: 'TRY', regularMarketTime: yesterdayClose, shortName: 'BIST 100' }))
+    );
+    const service = createPriceService(fetchFn as unknown as typeof fetch, () => now);
+    const q = await service.getStockQuote('XU100.IS');
+    expect(q).toMatchObject({ price: 10800, source: 'tradingview', name: 'BIST 100' });
+    expect((q!.price / q!.previousClose! - 1) * 100).toBeCloseTo(-1, 6);
+    expect(JSON.parse(String((fetchFn.mock.calls[1] as unknown as [string, RequestInit])[1].body)).symbols.tickers).toEqual(['BIST:XU100']);
+  });
+
+  it("keeps Yahoo's quote when TradingView fails or the quote is today's", async () => {
+    const failing = vi.fn(async (url: string) =>
+      url.includes('tradingview')
+        ? jsonResponse({}, false)
+        : jsonResponse(yahoo({ regularMarketPrice: 10909, previousClose: 10800, currency: 'TRY', regularMarketTime: yesterdayClose }))
+    );
+    expect((await createPriceService(failing as unknown as typeof fetch, () => now).getStockQuote('XU100.IS'))?.source).toBe('yahoo');
+
+    const today = vi.fn(async () =>
+      jsonResponse(yahoo({ regularMarketPrice: 10700, previousClose: 10909, currency: 'TRY', regularMarketTime: now / 1000 - 900 }))
+    );
+    expect((await createPriceService(today as unknown as typeof fetch, () => now).getStockQuote('XU100.IS'))?.source).toBe('yahoo');
+    expect(today).toHaveBeenCalledTimes(1);
   });
 });

@@ -324,6 +324,23 @@ export function parseGoldGramScan(data: unknown, nowMs: number): Quote | null {
   return null;
 }
 
+const TR_OFFSET_MS = 3 * 3_600_000;
+
+/**
+ * True when Borsa İstanbul is in its session (weekdays 10:00–18:10 Türkiye
+ * time, a few minutes' slack for delayed quotes) and the quote is from an
+ * earlier Türkiye day. Holidays read as in session, which only costs a
+ * TradingView lookup that returns the same last close.
+ */
+export function bistQuoteIsStale(quote: Quote, nowMs: number): boolean {
+  const local = new Date(nowMs + TR_OFFSET_MS);
+  const weekday = local.getUTCDay();
+  const minutes = local.getUTCHours() * 60 + local.getUTCMinutes();
+  if (weekday === 0 || weekday === 6 || minutes < 10 * 60 + 15 || minutes > 18 * 60 + 30) return false;
+  const quoteDay = new Date(Date.parse(quote.asOf) + TR_OFFSET_MS).toISOString().slice(0, 10);
+  return quoteDay < local.toISOString().slice(0, 10);
+}
+
 export function createPriceService(fetchFn: FetchFn = fetch, now: () => number = Date.now) {
   const cache = new Map<string, { expires: number; value: Quote | null }>();
 
@@ -349,6 +366,12 @@ export function createPriceService(fetchFn: FetchFn = fetch, now: () => number =
           );
           if (!res.ok) continue;
           const quote = parseYahooChart(await res.json());
+          if (quote && sym.endsWith('.IS') && bistQuoteIsStale(quote, now())) {
+            // Yahoo sometimes keeps serving the last session's BIST quote well
+            // into the next one, which shows yesterday's move as today's
+            const fresh = await loadTradingView(`BIST:${sym.slice(0, -3)}`);
+            if (fresh) return { ...fresh, ...(quote.name && { name: quote.name }) };
+          }
           if (quote) return quote;
         } catch {
           // try the next host

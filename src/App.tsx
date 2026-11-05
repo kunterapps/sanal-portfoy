@@ -67,6 +67,8 @@ import {
 
 const RATES_STORAGE_KEY = 'my_personal_portfolio_rates';
 const INDICES_STORAGE_KEY = 'my_personal_portfolio_indices';
+/** The header indices are reloaded when older than this and the page is in view */
+const INDICES_REFRESH_MS = 5 * 60_000;
 
 /** Lists the portfolios and switches between them; each one gets a fresh PortfolioApp */
 export default function App() {
@@ -242,8 +244,25 @@ function PortfolioApp({ portfolio, controls, sync, onOpenSync }: PortfolioAppPro
     setIndices((prev) => mergeMarketIndices(fresh, prev));
   }, []);
 
+  // A phone brings a backgrounded tab back without reloading it, so a strip
+  // loaded yesterday would still show yesterday's moves. Refresh it on load,
+  // when the page comes back into view, and every few minutes while it's shown.
   useEffect(() => {
-    refreshIndices();
+    let lastLoad = 0;
+    const load = () => {
+      lastLoad = Date.now();
+      refreshIndices();
+    };
+    const onVisible = () => {
+      if (document.visibilityState === 'visible' && Date.now() - lastLoad > INDICES_REFRESH_MS) load();
+    };
+    load();
+    const timer = setInterval(onVisible, 60_000);
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
   }, [refreshIndices]);
 
   useEffect(() => {
