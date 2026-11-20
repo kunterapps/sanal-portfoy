@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import DecimalInput from './DecimalInput';
 import { X, Check } from 'lucide-react';
 import { PortfolioAsset } from '../types/portfolio';
 import { formatCurrency } from '../utils/portfolioCalculations';
@@ -57,14 +58,12 @@ export const QuickPriceModal: React.FC<QuickPriceModalProps> = ({
             <label className="block text-slate-400 font-medium mb-1">
               Birim Anlık Fiyat ({asset.currentCurrency})
             </label>
-            <input
-              type="number"
-              step="any"
-              min="0.000001"
+            <DecimalInput
+              min={0.000001}
               required
               autoFocus
               value={price}
-              onChange={(e) => setPrice(parseFloat(e.target.value) || 0)}
+              onValueChange={setPrice}
               className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3.5 py-2.5 text-white tabular-nums text-base font-bold focus:outline-none focus:border-indigo-500"
             />
           </div>

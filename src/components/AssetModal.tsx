@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import DecimalInput from './DecimalInput';
 import { X, Sparkles, Landmark } from 'lucide-react';
 import { 
   PortfolioAsset, 
@@ -423,13 +424,11 @@ export const AssetModal: React.FC<AssetModalProps> = ({
                   : 'Adet / Pay Miktarı'}{' '}
                 <span className="text-rose-400">*</span>
               </label>
-              <input
-                type="number"
-                step="any"
-                min="0.000001"
+              <DecimalInput
+                min={0.000001}
                 required
                 value={quantity}
-                onChange={(e) => setQuantity(parseFloat(e.target.value) || 0)}
+                onValueChange={setQuantity}
                 className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3.5 py-2.5 text-white tabular-nums focus:outline-none focus:border-indigo-500"
               />
             </div>
@@ -438,13 +437,11 @@ export const AssetModal: React.FC<AssetModalProps> = ({
               <label className="block text-slate-300 font-medium mb-1">
                 {managedByTransactions ? 'Ortalama Maliyet' : 'Birim Alış Maliyeti'} <span className="text-rose-400">*</span>
               </label>
-              <input
-                type="number"
-                step="any"
-                min="0"
+              <DecimalInput
+                min={0}
                 required
                 value={costPrice}
-                onChange={(e) => setCostPrice(parseFloat(e.target.value) || 0)}
+                onValueChange={setCostPrice}
                 className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3.5 py-2.5 text-white tabular-nums focus:outline-none focus:border-indigo-500"
               />
             </div>
@@ -472,13 +469,11 @@ export const AssetModal: React.FC<AssetModalProps> = ({
               <label className="block text-slate-300 font-medium mb-1">
                 Birim Güncel Fiyat <span className="text-rose-400">*</span>
               </label>
-              <input
-                type="number"
-                step="any"
-                min="0"
+              <DecimalInput
+                min={0}
                 required
                 value={currentPrice}
-                onChange={(e) => setCurrentPrice(parseFloat(e.target.value) || 0)}
+                onValueChange={setCurrentPrice}
                 className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3.5 py-2.5 text-white tabular-nums focus:outline-none focus:border-indigo-500"
               />
             </div>
@@ -614,14 +609,12 @@ const DepositPanel: React.FC<{
               <label className="block text-slate-300 font-medium mb-1">
                 Anapara (₺) <span className="text-rose-400">*</span>
               </label>
-              <input
-                type="number"
-                step="any"
-                min="0.01"
+              <DecimalInput
+                min={0.01}
                 required
                 disabled={principalLocked}
                 value={principal}
-                onChange={(e) => onPrincipalChange(parseFloat(e.target.value) || 0)}
+                onValueChange={onPrincipalChange}
                 className={`${inputClass} disabled:opacity-50`}
               />
             </div>
@@ -642,13 +635,11 @@ const DepositPanel: React.FC<{
               <label className="block text-slate-300 font-medium mb-1">
                 Yıllık Faiz (brüt %) <span className="text-rose-400">*</span>
               </label>
-              <input
-                type="number"
-                step="any"
-                min="0"
+              <DecimalInput
+                min={0}
                 required
                 value={deposit.annualRatePct}
-                onChange={(e) => onChange({ annualRatePct: parseFloat(e.target.value) || 0 })}
+                onValueChange={(v) => onChange({ annualRatePct: v })}
                 className={inputClass}
               />
             </div>
@@ -690,12 +681,12 @@ const DepositPanel: React.FC<{
               </button>
               {customTerm && (
                 <div className="flex items-center gap-1.5">
-                  <input
-                    type="number"
-                    min="2"
-                    step="1"
+                  <DecimalInput
+                    integer
+                    min={2}
                     value={deposit.termDays}
-                    onChange={(e) => onChange({ termDays: Math.max(2, Math.round(parseFloat(e.target.value) || 2)) })}
+                    emptyValue={2}
+                    onValueChange={(v) => onChange({ termDays: Math.max(2, Math.round(v)) })}
                     className="w-20 bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-white tabular-nums focus:outline-none focus:border-emerald-500"
                   />
                   <span className="text-slate-400">gün</span>
@@ -707,13 +698,11 @@ const DepositPanel: React.FC<{
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-end">
             <div>
               <label className="block text-slate-300 font-medium mb-1">Stopaj (vergi kesintisi %)</label>
-              <input
-                type="number"
-                step="any"
-                min="0"
-                max="100"
+              <DecimalInput
+                min={0}
+                max={100}
                 value={deposit.withholdingPct}
-                onChange={(e) => onChange({ withholdingPct: parseFloat(e.target.value) || 0 })}
+                onValueChange={(v) => onChange({ withholdingPct: v })}
                 className={inputClass}
               />
             </div>
