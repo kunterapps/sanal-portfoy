@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import DecimalInput from './DecimalInput';
 import { X, Plus, Trash2 } from 'lucide-react';
 import { AssetTransaction, ExchangeRates, PortfolioAsset, TransactionType } from '../types/portfolio';
 import { formatCurrency, formatNumber } from '../utils/portfolioCalculations';
@@ -164,37 +165,33 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
             </div>
             <div>
               <label className="block text-slate-300 font-medium mb-1">Miktar</label>
-              <input
-                type="number"
-                step="any"
-                min="0.000001"
+              <DecimalInput
+                min={0.000001}
                 required
-                value={quantity || ''}
-                onChange={(e) => setQuantity(parseFloat(e.target.value) || 0)}
+                emptyWhenZero
+                value={quantity}
+                onValueChange={setQuantity}
                 className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2.5 text-white tabular-nums focus:outline-none focus:border-indigo-500"
               />
             </div>
             <div>
               <label className="block text-slate-300 font-medium mb-1">Birim Fiyat ({cur})</label>
-              <input
-                type="number"
-                step="any"
-                min="0"
+              <DecimalInput
+                min={0}
                 required
                 value={price}
-                onChange={(e) => setPrice(parseFloat(e.target.value) || 0)}
+                onValueChange={setPrice}
                 className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2.5 text-white tabular-nums focus:outline-none focus:border-indigo-500"
               />
             </div>
             <div>
               <label className="block text-slate-300 font-medium mb-1">Komisyon ({cur})</label>
-              <input
-                type="number"
-                step="any"
-                min="0"
-                value={fee || ''}
+              <DecimalInput
+                min={0}
+                emptyWhenZero
+                value={fee}
                 placeholder="0"
-                onChange={(e) => setFee(parseFloat(e.target.value) || 0)}
+                onValueChange={setFee}
                 className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2.5 text-white tabular-nums focus:outline-none focus:border-indigo-500"
               />
             </div>
